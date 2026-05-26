@@ -1,0 +1,1889 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>事故复盘与故障教训 · 访谈语料</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Source+Serif+Pro:ital,wght@0,400;0,500;0,600;1,400&display=swap" />
+<link rel="stylesheet" href="assets/style.css" />
+<script>(function(){try{var t=localStorage.getItem('iqa.theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();</script>
+<script defer src="assets/data/search-index.js"></script>
+<script defer src="assets/app.js"></script>
+</head>
+<body>
+<div class="progress"><i></i></div>
+<header class="site-header"><div class="inner">
+  <a class="site-brand" href="index.html">AI infra 大百科</a>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="glossary.html">Glossary</a>
+    <a href="https://github.com" target="_blank" rel="noopener">Repo</a>
+  </nav>
+  <button class="icon-btn" type="button" data-action="open-palette">
+    <span>搜索</span><span class="kbd">⌘K</span>
+  </button>
+  <button class="icon-btn" type="button" data-action="toggle-theme">☾  Light</button>
+</div></header>
+<main class="page">
+
+<div class="volume-layout">
+
+<aside class="toc"><h3>本卷 Q 列表</h3><ol>
+<li><a data-q="v10-q-1" href="#v10-q-1"><span class="qnum">Q1</span>训练中途突发 CUDA OOM，但显存监控显示余量充足：梯度累计显存洪峰复盘</a></li>
+<li><a data-q="v10-q-2" href="#v10-q-2"><span class="qnum">Q2</span>长序列训练激活显存爆炸：Selective activation checkpointing 失效复盘</a></li>
+<li><a data-q="v10-q-3" href="#v10-q-3"><span class="qnum">Q3</span>Adam 优化器状态显存占用翻倍：从 fp32 master 到 8-bit 优化器迁移踩坑</a></li>
+<li><a data-q="v10-q-4" href="#v10-q-4"><span class="qnum">Q4</span>推理服务 KV cache OOM：长 prompt 突发流量打爆显存</a></li>
+<li><a data-q="v10-q-5" href="#v10-q-5"><span class="qnum">Q5</span>PyTorch CUDA allocator 碎片化导致"明明有 10GB 余量也 OOM"</a></li>
+<li><a data-q="v10-q-6" href="#v10-q-6"><span class="qnum">Q6</span>NCCL all-reduce hang：256 卡训练突然全卡 idle 复盘</a></li>
+<li><a data-q="v10-q-7" href="#v10-q-7"><span class="qnum">Q7</span>IB 与以太网混用，all-reduce 性能掉 10×：路由误配复盘</a></li>
+<li><a data-q="v10-q-8" href="#v10-q-8"><span class="qnum">Q8</span>NVLink 拓扑不对称：相同模型同卡数训练吞吐差 30%</a></li>
+<li><a data-q="v10-q-9" href="#v10-q-9"><span class="qnum">Q9</span>慢节点 straggler：1024 卡训练被 1 个 rank 拖慢 2×</a></li>
+<li><a data-q="v10-q-10" href="#v10-q-10"><span class="qnum">Q10</span>NCCL 版本偏差 + 节点镜像漂移，跨节点通信功能错乱</a></li>
+<li><a data-q="v10-q-11" href="#v10-q-11"><span class="qnum">Q11</span>Checkpoint 静默损坏：恢复训练发现 loss 飞涨追溯文件 corruption</a></li>
+<li><a data-q="v10-q-12" href="#v10-q-12"><span class="qnum">Q12</span>Checkpoint 恢复耗时 1 小时：单 rank 串行加载 + 跨 NUMA 拷贝复盘</a></li>
+<li><a data-q="v10-q-13" href="#v10-q-13"><span class="qnum">Q13</span>S3 限速触发 SlowDown：分布式 checkpoint 上传雪崩</a></li>
+<li><a data-q="v10-q-14" href="#v10-q-14"><span class="qnum">Q14</span>Lustre 配额耗尽，训练任务静默写入失败</a></li>
+<li><a data-q="v10-q-15" href="#v10-q-15"><span class="qnum">Q15</span>异步 checkpoint 与下一 step 竞态：FSDP2 async save 部分 shard 是旧版</a></li>
+<li><a data-q="v10-q-16" href="#v10-q-16"><span class="qnum">Q16</span>vLLM continuous batching 死锁：waiting queue 堆积但 running queue 不前进</a></li>
+<li><a data-q="v10-q-17" href="#v10-q-17"><span class="qnum">Q17</span>推理服务 KV cache 内存泄漏：长跑后 OOM 与 cache hit rate 下滑</a></li>
+<li><a data-q="v10-q-18" href="#v10-q-18"><span class="qnum">Q18</span>推理请求超时雪崩：上游重试放大流量 3× 击穿后端</a></li>
+<li><a data-q="v10-q-19" href="#v10-q-19"><span class="qnum">Q19</span>FP8 量化推理数值漂移：上线后某些任务准确率掉 5%</a></li>
+<li><a data-q="v10-q-20" href="#v10-q-20"><span class="qnum">Q20</span>Autoscaler 抖动：流量小波动触发扩缩容震荡</a></li>
+<li><a data-q="v10-q-21" href="#v10-q-21"><span class="qnum">Q21</span>Spot 抢占雪崩：高优任务突发挤掉 100 个低优任务连锁失败</a></li>
+<li><a data-q="v10-q-22" href="#v10-q-22"><span class="qnum">Q22</span>误发 SIGTERM 致整集群训练任务连锁退出：cleanup script bug 复盘</a></li>
+<li><a data-q="v10-q-23" href="#v10-q-23"><span class="qnum">Q23</span>SLURM queue 饥饿：长任务永远排不上，运维不察觉</a></li>
+<li><a data-q="v10-q-24" href="#v10-q-24"><span class="qnum">Q24</span>GPU 资源声明不匹配：作业拿到 4 卡却只能用 2 卡</a></li>
+<li><a data-q="v10-q-25" href="#v10-q-25"><span class="qnum">Q25</span>节点失联检测延迟：30 分钟才发现节点死机训练全程在等</a></li>
+<li><a data-q="v10-q-26" href="#v10-q-26"><span class="qnum">Q26</span>比较：训练 NaN、通信 hang、推理 OOM 三类典型事故的定位路径与防御策略</a></li>
+<li><a data-q="v10-q-27" href="#v10-q-27"><span class="qnum">Q27</span>场景：周五下午 5 点推理服务 P99 飙升 + region 5xx，30 分钟决策路径</a></li>
+<li><a data-q="v10-q-28" href="#v10-q-28"><span class="qnum">Q28</span>估算：万卡训练集群在 5% 年故障率下，端到端有效训练时间占比</a></li>
+<li><a data-q="v10-q-29" href="#v10-q-29"><span class="qnum">Q29</span>设计：100 人规模 ML 团队的事故复盘机制</a></li>
+</ol></aside>
+
+<article class="content">
+  <h1>事故复盘与故障教训</h1>
+  <div class="vol-intro"><h2>主题边界</h2>
+<p>本卷收录 25 个典型化、综合化的工程故障 case，每题用 6 节模板讲清楚现象、根因、定位、修复、教训、预防。涵盖 OOM、通信、存储/checkpoint、推理服务、平台/编排五类。所有 case 为综合化模型化情境，不指向任何具体公司、集群或时间点的真实事故。</p>
+<p>本卷 6 节模板的语义与其它卷略有不同：</p>
+<ul>
+<li>§1 现象：故障表现、报警信号、用户感知</li>
+<li>§2 根因层级原理：触发故障的底层技术因果</li>
+<li>§3 定位手段与命令：使用的工具、命令、metric</li>
+<li>§4 修复路径与权衡：短期止血 vs 长期解决</li>
+<li>§5 同类变体 / 易错点：兄弟故障与面试追问</li>
+<li>§6 预防机制：监控、告警、流程、自动化</li>
+</ul>
+<p>---</p></div>
+  <h2 id="v10-q-1"><span class="qchip">Q1</span>训练中途突发 CUDA OOM，但显存监控显示余量充足：梯度累计显存洪峰复盘</h2>
+<h3 id="v10-q-1-s-1">1. 现象</h3>
+<p>某次大规模训练任务在第 3 个 epoch 中段突发 <code>CUDA out of memory</code> 抛错，单 rank 报 <code>Tried to allocate 2.4 GiB</code>，但 Prometheus 上 <code>nvidia_smi_memory_used</code> 在故障前 5 分钟稳定在 60 GB / 80 GB，留有 20 GB 余量。值班同学第一反应是"显存够啊为啥 OOM"。重启后 1–2 个 epoch 内必复现，定位到与 <code>gradient_accumulation_steps</code> 调大有关。</p>
+<h3 id="v10-q-1-s-2">2. 根因层级原理</h3>
+<p>PyTorch 反向传播时，每一次 <code>loss.backward()</code> 都会把当前 micro-batch 的梯度累加到 <code>param.grad</code> 上。如果模型用了 <code>bf16</code> 主权重 + <code>fp32</code> 梯度（混合精度的常见配置），且没有显式指定 <code>set_to_none=True</code>，每个参数都常驻一份 <code>fp32</code> grad tensor。打开 grad accumulation 后，<strong>反向阶段的瞬时峰值</strong> = 已累计的 grad（常驻）+ 本 step 临时激活 + 本 step 临时反向中间张量。<code>nvidia-smi</code> 看到的"60 GB"是上一 step 结束后的稳态，<strong>不是反向中那一瞬的峰值</strong>。当 batch_size 或 seq_len 变化导致激活变大时，瞬时峰值就会越界。</p>
+<h3 id="v10-q-1-s-3">3. 定位手段与命令</h3>
+<ul>
+<li>启用 PyTorch memory snapshot：训练 step 包一层 <code>torch.cuda.memory._record_memory_history(max_entries=100000)</code>，OOM 后 dump 到 <code>.pickle</code> 用 <code>pytorch.org/memory_viz</code> 离线看时间轴</li>
+<li><code>torch.cuda.max_memory_allocated()</code> 比 <code>memory_allocated()</code> 更能反映峰值</li>
+<li>打印 <code>torch.cuda.memory_summary(device, abbreviated=False)</code> 可看到 reserved / active / allocated 三层差距</li>
+<li>DCGM <code>DCGM_FI_DEV_FB_USED</code> 采样间隔降到 1s 看尖峰</li>
+</ul>
+<h3 id="v10-q-1-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期止血</strong>：减小 micro-batch 或 seq_len；激活 checkpointing（<code>torch.utils.checkpoint</code>）牺牲 ~30% 反向时间换 50%+ 激活显存</li>
+<li><strong>中期</strong>：grad accumulation 步内手动 <code>optimizer.zero_grad(set_to_none=True)</code> 改为更细粒度的分桶；切到 <code>bf16</code> 全栈（grad 也 bf16，省一半）</li>
+<li><strong>长期</strong>：上 FSDP2 或 ZeRO-2，把 grad 切到多 rank</li>
+<li>权衡：激活 checkpointing 实现成本最低但拖训练吞吐；FSDP2 收益大但迁移成本高，且小集群（&lt; 8 卡）反而因通信开销变慢</li>
+</ul>
+<h3 id="v10-q-1-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：<code>torch.compile</code> 编译后激活模式变化导致显存峰值漂移，重编译触发 OOM</li>
+<li>变体：<code>accelerate</code> / <code>deepspeed</code> 配置里 <code>zero_stage</code> 与 <code>gradient_accumulation_steps</code> 交互复杂，误配会放大峰值</li>
+<li>易错：只看 <code>nvidia-smi</code> 不看 PyTorch allocator 内部，被"reserved 但未 active"的显存误导</li>
+<li>追问："为什么 reserved 比 allocated 大？"→ allocator 缓存碎片；用 <code>PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True</code> 缓解</li>
+</ul>
+<h3 id="v10-q-1-s-6">6. 预防机制</h3>
+<ul>
+<li>训练脚本启动时打印一次预估峰值（<code>max_memory_allocated</code> after warmup step）写入 metric</li>
+<li>Pre-flight check：CI 跑一次 1-step dry run 在小卡上验证显存模型</li>
+<li>在 launcher 里强制把 <code>PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:512</code> 作为基线</li>
+<li>Code review 守门：任何调大 grad_accum / seq_len / batch_size 的 PR 必须附 dry run 显存截图</li>
+<li>报警：DCGM FB 利用率 &gt; 92% 持续 1 min 报 warning，&gt; 96% 报 critical</li>
+</ul>
+<h3 id="v10-q-1-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：grad accumulation 期间反向那一瞬的显存峰值远高于稳态，nvidia-smi 看不到。</li>
+<li>关键机制：常驻 fp32 grad + 临时激活 + 反向中间张量同时存在，micro-batch 或 seq_len 一变就越界。</li>
+<li>修复 / 防御：FSDP2 切 grad + 激活 checkpointing + <code>expandable_segments</code> + dry-run 显存预估。</li>
+<li>面试加分关键词：set_to_none、max_memory_allocated、memory snapshot、ZeRO-2 grad partition。</li>
+</ul>
+<h3 id="v10-q-1-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"显存稳态够但反向瞬时不够"这一核心症状？</li>
+<li>[ ] 你能不能解释为什么 grad accumulation 会放大反向峰值而非稳态？</li>
+<li>[ ] 你能不能举一个类似场景（例如 <code>torch.compile</code> 重编译导致激活模式漂移）？</li>
+<li>[ ] 你能不能说出至少 3 种防御手段（FSDP2、激活 checkpoint、expandable_segments、dry-run）？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-2"><span class="vchip">Vol 10</span><span class="qchip">Q2</span><span class="ttl">长序列训练激活显存爆炸：Selective activation checkpointing 失效复盘</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-5"><span class="vchip">Vol 10</span><span class="qchip">Q5</span><span class="ttl">PyTorch CUDA allocator 碎片化导致"明明有 10GB 余量也 OOM"</span></a></li>
+    <li><a href="11-posttraining-new-inference.html#v11-q-19"><span class="vchip">Vol 11</span><span class="qchip">Q19</span><span class="ttl">KV cache offload (到 CPU / SSD / 跨节点) 什么时候值得？</span></a></li>
+    <li><a href="05-memory-communication-profiling.html#v05-q-69"><span class="vchip">Vol 05</span><span class="qchip">Q69</span><span class="ttl">设计题：万卡集群显存与通信可观测性栈（OOM / 掉速 5 分钟定位）</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-2"><span class="qchip">Q2</span>长序列训练激活显存爆炸：Selective activation checkpointing 失效复盘</h2>
+<h3 id="v10-q-2-s-1">1. 现象</h3>
+<p>某次把训练序列长度从 8K 升到 32K 后，单 rank 反向阶段稳定 OOM。用户已经开了 <code>gradient_checkpointing=True</code>，"按理说激活只保留每层入口"。监控显示前向阶段显存平稳，反向第一个 step 内瞬时从 40 GB 飙到 79 GB。</p>
+<h3 id="v10-q-2-s-2">2. 根因层级原理</h3>
+<p><code>gradient_checkpointing</code> 默认是 <strong>per-layer full recompute</strong>：反向走到某层时，重新跑一遍该层前向以重建中间激活，再算梯度。但 attention 层内部如果用了 FlashAttention 或自定义算子，"该层"已经做了内部融合，激活峰值不在层入口而在 attention softmax 中间张量；同时 32K 序列的 attention 中间张量是 O(L²) 量级的，单层重算时 softmax logits 矩阵就能吃掉 20+ GB。换句话说：checkpoint 切的粒度在层级，但显存峰值在层内。</p>
+<h3 id="v10-q-2-s-3">3. 定位手段与命令</h3>
+<ul>
+<li><code>torch.cuda.memory._record_memory_history()</code> 采到反向时间轴，看到峰值发生在某层 backward 内部而非层入口</li>
+<li>直接读 <code>torch.profiler</code> 的 memory timeline，标注每个 op 的 alloc/free</li>
+<li>对单层做"isolate"：写一个最小复现，仅跑一层前向 + 反向，看激活高度</li>
+<li><code>nvitop</code> 实时观察反向时显存增长曲线斜率</li>
+</ul>
+<h3 id="v10-q-2-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：换用 FlashAttention-2/3 或 PyTorch SDPA 的 <code>memory_efficient</code> backend，把 attention 内部峰值从 O(L²) 压到 O(L)</li>
+<li><strong>中期</strong>：开 selective activation checkpointing，只对 MLP 做 checkpoint，attention 走 SDPA（attention 已是 memory-efficient 不需重算）</li>
+<li><strong>长期</strong>：序列并行（Ulysses / Ring Attention），把 L 维切到多卡</li>
+<li>权衡：FlashAttention 需要 SM ≥ 8.0；selective checkpoint 实现复杂度上去；序列并行需要改 model code 且只在 L 极大时才划算</li>
+</ul>
+<h3 id="v10-q-2-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：<code>use_reentrant=True</code>（PyTorch checkpoint 旧接口）有梯度图引用泄漏，长跑后激活慢慢涨；切到 <code>use_reentrant=False</code></li>
+<li>易错：以为开了 checkpoint 就万事大吉，没看实际单层峰值</li>
+<li>易错：FlashAttention 包装的 mask 模式不对，回退到 dense path，悄悄退化</li>
+<li>追问："序列并行和张量并行有什么区别？"→ 一个切 L 一个切 hidden</li>
+</ul>
+<h3 id="v10-q-2-s-6">6. 预防机制</h3>
+<ul>
+<li>任何序列长度变更需先在小模型上跑一次 memory snapshot</li>
+<li>CI 报告"激活/参数比"金字塔指标，超阈值挂红</li>
+<li>默认 attention backend 通过环境变量统一管控（<code>PYTORCH_SDPA_PRIORITY=flash,mem_efficient,math</code>），禁止业务代码直接 hardcode</li>
+<li>观察 metric：反向 step 时长 / 前向 step 时长比例，比例突增提示 recompute 失控</li>
+</ul>
+<h3 id="v10-q-2-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：层级 checkpointing 切不到层内 attention softmax 中间张量，O(L²) 矩阵把卡撑爆。</li>
+<li>关键机制：reactive recompute 在层入口但峰值在层内；32K 序列下 softmax logits 单层吃 20+ GB。</li>
+<li>修复 / 防御：FlashAttention / SDPA mem_efficient + selective checkpoint + 序列并行。</li>
+<li>面试加分关键词：use_reentrant、SDPA backend、Ulysses、Ring Attention、O(L) vs O(L²)。</li>
+</ul>
+<h3 id="v10-q-2-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"开了 gradient checkpointing 仍然 OOM"这一症状？</li>
+<li>[ ] 你能不能解释 attention 内部 O(L²) 中间张量为何打穿 per-layer checkpoint？</li>
+<li>[ ] 你能不能举一个类似场景（如 long-context 微调或 RAG 拼超长上下文）？</li>
+<li>[ ] 你能不能说出 selective activation checkpointing 与 FlashAttention 各自的边界？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-1"><span class="vchip">Vol 10</span><span class="qchip">Q1</span><span class="ttl">训练中途突发 CUDA OOM，但显存监控显示余量充足：梯度累计显存洪峰复盘</span></a></li>
+    <li><a href="05-memory-communication-profiling.html#v05-q-66"><span class="vchip">Vol 05</span><span class="qchip">Q66</span><span class="ttl">比较题：activation checkpointing 全层 vs selective vs attention 边界三种策略</span></a></li>
+    <li><a href="05-memory-communication-profiling.html#v05-q-7"><span class="vchip">Vol 05</span><span class="qchip">Q7</span><span class="ttl">gradient checkpointing 和 activation compression 的结合？</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-12"><span class="vchip">Vol 10</span><span class="qchip">Q12</span><span class="ttl">Checkpoint 恢复耗时 1 小时：单 rank 串行加载 + 跨 NUMA 拷贝复盘</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-3"><span class="qchip">Q3</span>Adam 优化器状态显存占用翻倍：从 fp32 master 到 8-bit 优化器迁移踩坑</h2>
+<h3 id="v10-q-3-s-1">1. 现象</h3>
+<p>某次扩模型从 7B 到 13B 后，加载 checkpoint 阶段就 OOM，连第一个 step 都没跑起来。<code>nvidia-smi</code> 显示加载时显存稳步爬到 80 GB 满载，进程退出。用户百思不解：13B × 2 bytes（bf16）= 26 GB，怎么会装不下 80 GB 的 H100？</p>
+<h3 id="v10-q-3-s-2">2. 根因层级原理</h3>
+<p>Adam/AdamW 维护 first moment（m）+ second moment（v）+ master copy（fp32），每个参数 3 × 4 = 12 bytes。再叠加模型本身 bf16 权重（2 bytes）+ fp32 grad（4 bytes）= 18 bytes/param 总占用。13B × 18 ≈ 234 GB——单卡放不下，必须分布式。如果 Adam state 没切（DDP 模式或 ZeRO-1 未启用），单卡就会爆。即便切了，优化器状态加载阶段是先 <code>load_state_dict</code> 到主 rank，再 broadcast，主 rank 瞬时显存翻倍。</p>
+<h3 id="v10-q-3-s-3">3. 定位手段与命令</h3>
+<ul>
+<li><code>torch.cuda.memory_summary()</code> 在 load 前后各打一次，对比 allocated 增量</li>
+<li>启动加 <code>TORCH_DISTRIBUTED_DEBUG=DETAIL</code> 看 ZeRO 切片实际形状</li>
+<li>直接打印 <code>optimizer.state_dict()</code> 第一项 tensor 的 <code>numel * dtype.itemsize</code>，乘上参数数估算总量</li>
+<li>DCGM 采样观察 OOM 那一刻是哪个 rank 先爆</li>
+</ul>
+<h3 id="v10-q-3-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：换 <code>bitsandbytes</code> 8-bit Adam（<code>bnb.optim.AdamW8bit</code>），状态从 8 bytes 压到 2 bytes/参数</li>
+<li><strong>中期</strong>：切 ZeRO-2 或 FSDP2 的 <code>FULL_SHARD</code>，optimizer state 跨 rank 切分</li>
+<li><strong>长期</strong>：CPU offload optimizer state（DeepSpeed ZeRO-Offload / FSDP2 <code>cpu_offload</code>）；显存换内存 + PCIe 带宽</li>
+<li>权衡：8-bit Adam 在小学习率长训练下精度几乎无损但需要分块量化超参；CPU offload 拖每 step 时间 1.5–3×；ZeRO-2 通信量翻倍</li>
+</ul>
+<h3 id="v10-q-3-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：Lion / Adafactor 等优化器状态更小，但收敛性需要单独验证</li>
+<li>变体：从单卡迁多卡时 optimizer state 切分逻辑没改，多卡 broadcast 仍按全量</li>
+<li>易错：把"模型 fits 显存"误等同于"训练 fits 显存"，忽略 optimizer 6× 系数</li>
+<li>追问："Adafactor 怎么省显存？"→ 用 row/column 因子化代替完整二阶矩</li>
+</ul>
+<h3 id="v10-q-3-s-6">6. 预防机制</h3>
+<ul>
+<li>Pre-flight 显存预算公式写到 launcher：<code>mem_per_param = sizeof(weight) + sizeof(grad) + optim_overhead</code>，启动前打印</li>
+<li>默认 ZeRO-2 或 FSDP2 起步，DDP 仅小模型保留</li>
+<li>优化器选型 PR 模板：附显存对比 + 收敛曲线对比</li>
+<li>监控：<code>torch.cuda.memory_allocated()</code> 在 first step 后采集存档作为基线</li>
+</ul>
+<h3 id="v10-q-3-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：AdamW 自带 m/v/master 三份 fp32，每参数 18 bytes，模型权重只是冰山一角。</li>
+<li>关键机制：13B × 18 ≈ 234 GB，单卡放不下；rank 0 加载阶段还会瞬时翻倍。</li>
+<li>修复 / 防御：bnb 8-bit Adam / ZeRO-2 / FSDP2 FULL_SHARD / CPU offload 多档可选。</li>
+<li>面试加分关键词：bitsandbytes、Adafactor、ZeRO stages、optimizer state sharding。</li>
+</ul>
+<h3 id="v10-q-3-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"显存账只算了权重 OOM 在加载阶段"的核心症状？</li>
+<li>[ ] 你能不能解释每参数 18 bytes 这条公式的构成？</li>
+<li>[ ] 你能不能举一个类似场景（如从 7B 扩到 70B 没切 optimizer state）？</li>
+<li>[ ] 你能不能说出 8-bit Adam、ZeRO-2、CPU offload 三档的权衡？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-2"><span class="vchip">Vol 10</span><span class="qchip">Q2</span><span class="ttl">长序列训练激活显存爆炸：Selective activation checkpointing 失效复盘</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-1"><span class="vchip">Vol 10</span><span class="qchip">Q1</span><span class="ttl">训练中途突发 CUDA OOM，但显存监控显示余量充足：梯度累计显存洪峰复盘</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-12"><span class="vchip">Vol 10</span><span class="qchip">Q12</span><span class="ttl">Checkpoint 恢复耗时 1 小时：单 rank 串行加载 + 跨 NUMA 拷贝复盘</span></a></li>
+    <li><a href="05-memory-communication-profiling.html#v05-q-68"><span class="vchip">Vol 05</span><span class="qchip">Q68</span><span class="ttl">估算题：H100 NVL8 单机 70B BF16 FSDP2 训练每 step 的通信量 / HBM 带宽 / launch 次数</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-4"><span class="qchip">Q4</span>推理服务 KV cache OOM：长 prompt 突发流量打爆显存</h2>
+<h3 id="v10-q-4-s-1">1. 现象</h3>
+<p>某线上推理服务（vLLM 部署 70B 模型）在工作日下午突然进入 5xx 高发期，p99 时延从 800ms 飙到 30s+。日志大量 <code>KV cache exhausted, request preempted</code> + <code>OOM, killing oldest request</code>。监控显示 <code>vllm:gpu_cache_usage_perc</code> 飙到 100% 持续 10+ 分钟。流量层 QPS 仅上涨 1.3×，与故障级联不成正比。</p>
+<h3 id="v10-q-4-s-2">2. 根因层级原理</h3>
+<p>vLLM 的 PagedAttention 把 KV 缓存切成固定大小 block（默认 16 token/block），全卡 KV 缓存容量在启动时根据 <code>gpu_memory_utilization</code> 静态分配。当请求 prompt 长度分布从均值 1K 突变到一批 8K 长 prompt，单请求占用 block 数 8×，而 <code>max_num_seqs</code> 没变，总 block 池被瞬间耗尽。新请求进 waiting queue，老请求被 preempt（KV 被丢弃后续重算），形成"重算 → 占用 → preempt → 再重算"的雪崩，整体吞吐崩溃。</p>
+<h3 id="v10-q-4-s-3">3. 定位手段与命令</h3>
+<ul>
+<li>vLLM Prometheus metrics：<code>vllm:gpu_cache_usage_perc</code>、<code>vllm:num_preempted_total</code>、<code>vllm:waiting_lora_adapters</code> 同时画一张图</li>
+<li>取访问日志统计 prompt 长度分布的 p50/p95/p99，对比故障前后</li>
+<li><code>nvidia-smi</code> 看 GPU memory 稳定（KV 缓存是预分配的，OOM 不会反映在 nvidia-smi）</li>
+<li>打开 vLLM <code>--disable-log-requests=False</code>，看具体哪些请求被 preempt</li>
+</ul>
+<h3 id="v10-q-4-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期止血</strong>：调大 <code>gpu_memory_utilization</code> 从 0.9 到 0.95；调小 <code>max_num_seqs</code> 控制并发；网关层加 prompt 长度限流</li>
+<li><strong>中期</strong>：开 <code>enable_prefix_caching</code> 利用前缀复用减少 KV 重算；按 prompt 长度分流到不同实例（短 prompt 走高并发实例，长 prompt 走低并发）</li>
+<li><strong>长期</strong>：上 vLLM V1 + 分块 prefill（chunked prefill），缓解长 prompt 占用；KV 缓存 offload 到 CPU/远端（牺牲 TPOT 换容量）</li>
+<li>权衡：调大 <code>gpu_memory_utilization</code> 留给 activation 的余量变小，可能触发 activation OOM；分流方案需要网关侧 routing 改动</li>
+</ul>
+<h3 id="v10-q-4-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：MQA/GQA 模型 KV 占用本身已经压缩，长 prompt 下相对收益更明显但绝对量仍大</li>
+<li>变体：推测解码（speculative decoding）开了之后小模型 KV 也占池</li>
+<li>易错：以为 <code>gpu_memory_utilization=0.9</code> 是动态限制——实际是启动时一次性分配</li>
+<li>追问："PagedAttention 和传统 KV 缓存区别？"→ 物理 block + 逻辑指针，避免内部碎片</li>
+</ul>
+<h3 id="v10-q-4-s-6">6. 预防机制</h3>
+<ul>
+<li>监控：<code>kv_cache_usage</code> p95 设双阈值（80% warning / 95% critical）</li>
+<li>灰度发布前压测覆盖长 prompt 场景（造一批 4K/8K/16K prompt 压测）</li>
+<li>网关侧硬编码 <code>max_prompt_tokens</code> 上限，超长直接 4xx 拒绝而非进入服务</li>
+<li>容量规划文档：基于 prompt 长度分布预估 block 池大小，留 30% headroom</li>
+<li>SRE rotation 季度演练：人为打 burst 长 prompt 流量验证降级路径</li>
+</ul>
+<h3 id="v10-q-4-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：长 prompt 突增让 KV block 池被瞬间打满，preempt 与重算雪崩。</li>
+<li>关键机制：vLLM block 池启动静态分配，单请求 block 数随 prompt 长度线性涨。</li>
+<li>修复 / 防御：网关限 prompt 长度 + 分流长短 prompt + chunked prefill + prefix cache。</li>
+<li>面试加分关键词：PagedAttention、gpu_memory_utilization、preempt、chunked prefill、KV offload。</li>
+</ul>
+<h3 id="v10-q-4-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"QPS 才涨 1.3× 但 p99 飙 30 倍"的核心症状？</li>
+<li>[ ] 你能不能解释 KV block 池静态分配 + 长 prompt 占用激增的雪崩机制？</li>
+<li>[ ] 你能不能举一个类似场景（如代码助手大 repo context 突发）？</li>
+<li>[ ] 你能不能说出网关限长、分流、chunked prefill 各自的代价？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-17"><span class="vchip">Vol 10</span><span class="qchip">Q17</span><span class="ttl">推理服务 KV cache 内存泄漏：长跑后 OOM 与 cache hit rate 下滑</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-26"><span class="vchip">Vol 10</span><span class="qchip">Q26</span><span class="ttl">比较：训练 NaN、通信 hang、推理 OOM 三类典型事故的定位路径与防御策略</span></a></li>
+    <li><a href="11-posttraining-new-inference.html#v11-q-22"><span class="vchip">Vol 11</span><span class="qchip">Q22</span><span class="ttl">场景题：8 张 H200 + 70B Llama + 32k 上下文 + SLO TTFT&lt;500ms TPOT&lt;50ms，怎么部署？</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-27"><span class="vchip">Vol 10</span><span class="qchip">Q27</span><span class="ttl">场景：周五下午 5 点推理服务 P99 飙升 + region 5xx，30 分钟决策路径</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-5"><span class="qchip">Q5</span>PyTorch CUDA allocator 碎片化导致"明明有 10GB 余量也 OOM"</h2>
+<h3 id="v10-q-5-s-1">1. 现象</h3>
+<p>长跑训练任务（连续运行 24h+）在某个 step 突然 OOM：<code>Tried to allocate 512 MiB but only 8.3 GiB free; allocator reserved 71.2 GiB; 8.7 GiB unreleasable</code>。短时间内 reserved 与 allocated 差距越拉越大，最终单次 512MB 分配请求都走不通。</p>
+<h3 id="v10-q-5-s-2">2. 根因层级原理</h3>
+<p>PyTorch 默认 <code>caching allocator</code> 把释放的 tensor 内存留作缓存，下次同尺寸 tensor 直接复用避免 cudaMalloc 开销。但缓存按 size class 分桶（默认按 2MB 切分对齐），如果训练过程中频繁出现"先分配大 tensor，再分配小 tensor，再释放大 tensor"的顺序，大块在物理空间被小块拦腰切断，大尺寸新请求找不到连续段——即使总余量够也分不出来。这就是经典的外部碎片。动态形状（如变长 batch）、<code>torch.compile</code> recompile、bucket 切换都是触发源。</p>
+<h3 id="v10-q-5-s-3">3. 定位手段与命令</h3>
+<ul>
+<li>设置 <code>PYTORCH_CUDA_ALLOC_CONF=backend:cudaMallocAsync</code> 试一下原生 async allocator 是否能避免（适合较新 driver）</li>
+<li>抓 memory snapshot：<code>torch.cuda.memory._dump_snapshot('snapshot.pickle')</code>，用 memory_viz 看碎片分布</li>
+<li><code>torch.cuda.memory_stats()['reserved_bytes.all.current']</code> 与 <code>allocated_bytes.all.current</code> 差距即为缓存量；<code>num_alloc_retries</code> 非零说明已经发生过碎片重试</li>
+<li>打印 <code>torch.cuda.memory_summary()</code> 看每个 size pool 的占用</li>
+</ul>
+<h3 id="v10-q-5-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：设 <code>PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True</code>，让 segment 可扩展，缓解碎片</li>
+<li><strong>中期</strong>：调 <code>max_split_size_mb</code> 限制大块被切割（如 128 / 256 MB）；间隔性 <code>torch.cuda.empty_cache()</code>（注意这只清空 cache，不会回收 active）</li>
+<li><strong>长期</strong>：固定 batch shape（pad 到 bucket 边界）+ 关掉动态 recompile；切 <code>cudaMallocAsync</code> backend（CUDA 11.4+ 支持）</li>
+<li>权衡：<code>expandable_segments</code> 在某些老 kernel 下兼容性差；<code>empty_cache</code> 频繁调用会拖慢训练；固定 shape 会引入 padding 浪费</li>
+</ul>
+<h3 id="v10-q-5-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：多 stream 训练 / 推理混部时不同 stream 各自缓存导致碎片放大</li>
+<li>变体：MIG 切片小卡上碎片相对总量比例更显著</li>
+<li>易错：以为 <code>empty_cache()</code> 解决一切——其实只能释放未被引用的 cache 块</li>
+<li>追问："<code>expandable_segments</code> 是怎么做到的？"→ 用虚拟地址保留 + 物理页按需 commit，类似 mmap</li>
+</ul>
+<h3 id="v10-q-5-s-6">6. 预防机制</h3>
+<ul>
+<li>默认 launcher 注入 <code>PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:512</code></li>
+<li>长跑任务启用 hourly memory snapshot 异步上报</li>
+<li>监控：<code>torch.cuda.memory_stats()['num_alloc_retries']</code> 增量 &gt; 10/min 报警</li>
+<li>训练完成时 dump 一次 snapshot 进 artifact，供 review</li>
+<li>长跑（&gt; 12h）任务定期保存 checkpoint 后做 <code>torch.cuda.synchronize()</code> + <code>empty_cache()</code> 作为 housekeeping</li>
+</ul>
+<h3 id="v10-q-5-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：caching allocator 外部碎片让"明明有余量"也分不出连续段。</li>
+<li>关键机制：变长 batch / recompile / bucket 切换让大块被小块拦腰切断。</li>
+<li>修复 / 防御：<code>expandable_segments:True</code>、<code>max_split_size_mb</code> 限割、固定 batch shape。</li>
+<li>面试加分关键词：cudaMallocAsync、memory snapshot、num_alloc_retries、size pool。</li>
+</ul>
+<h3 id="v10-q-5-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"reserved 71G 但 512MB 分不出"的核心症状？</li>
+<li>[ ] 你能不能解释 caching allocator 缓存策略与外部碎片的因果？</li>
+<li>[ ] 你能不能举一个类似场景（如 multi-stream 推理混部）？</li>
+<li>[ ] 你能不能说出 expandable_segments 的实现原理（虚拟地址保留 + 按需 commit）？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-1"><span class="vchip">Vol 10</span><span class="qchip">Q1</span><span class="ttl">训练中途突发 CUDA OOM，但显存监控显示余量充足：梯度累计显存洪峰复盘</span></a></li>
+    <li><a href="03-cuda-triton-custom-ops.html#v03-q-32"><span class="vchip">Vol 03</span><span class="qchip">Q32</span><span class="ttl">RAII 模式管理 CUDA 资源？unique_ptr with custom deleter？</span></a></li>
+    <li><a href="14-domestic-chips-heterogeneous.html#v14-q-9"><span class="vchip">Vol 14</span><span class="qchip">Q9</span><span class="ttl">MLIR / IREE / TVM 在国产芯片上的应用</span></a></li>
+    <li><a href="09-strategy-engineering-decisions.html#v09-q-34"><span class="vchip">Vol 09</span><span class="qchip">Q34</span><span class="ttl">设计题：LLM 平台成本治理体系</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-6"><span class="qchip">Q6</span>NCCL all-reduce hang：256 卡训练突然全卡 idle 复盘</h2>
+<h3 id="v10-q-6-s-1">1. 现象</h3>
+<p>某 256 卡（32 节点 × 8 卡）训练任务，运行至第 4 小时全集群 GPU 利用率从 95% 跌到 0%，进程不退出、不报错、不打 log。<code>nvidia-smi</code> 显示所有卡 SM 占用 100% 但功耗只有 idle 水平的 1.2 倍——典型的 spin-wait。30 分钟后 SLURM 触发 walltime 警告，运维介入才发现 hang。</p>
+<h3 id="v10-q-6-s-2">2. 根因层级原理</h3>
+<p>NCCL 的 collective（all-reduce / all-gather 等）按 ranks 间集合语义同步执行。每个 rank 在 collective 入口排好队后，内部 CUDA kernel 进入 busy-wait loop 等所有 rank 都到达。如果某个 rank 因为 (a) 某 op 异常 hang（例如 dataloader worker 死锁），(b) 某 GPU 因 ECC error 进入 fallback path，(c) NIC 链路 flap，导致它没投递自己的数据，则其它 rank 都卡在 busy-wait spin 上。<code>nvidia-smi</code> 看 SM 100% 但 GPU clock 是 lowest gear，因为只在跑 spin 指令。NCCL 默认无超时（旧版本）或 30 分钟超时（新版本），所以表现就是"看起来在算其实在等"。</p>
+<h3 id="v10-q-6-s-3">3. 定位手段与命令</h3>
+<ul>
+<li>设 <code>NCCL_DEBUG=INFO</code>（或 <code>WARN</code>）+ <code>TORCH_NCCL_BLOCKING_WAIT=1</code> + <code>TORCH_NCCL_ASYNC_ERROR_HANDLING=1</code> + <code>TORCH_NCCL_TRACE_BUFFER_SIZE=20000</code>，触发 <code>dump_traceback</code> 看每个 rank 卡在哪</li>
+<li><code>py-spy dump --pid &amp;lt;PID&amp;gt;</code> 抓 Python 调用栈</li>
+<li><code>nsys profile</code> 在线接管已运行进程（受限场景才行），看 CUDA stream 状态</li>
+<li>集群层：<code>dcgmi diag -r 3</code> 检 GPU 健康；NIC 看 <code>ibstat</code> 与 <code>ibping</code>；<code>nccl-tests/all_reduce_perf</code> 单独跑确认通信链路</li>
+</ul>
+<h3 id="v10-q-6-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：定位是哪个 rank 没到 → 重启该节点或退出该 rank 让 SLURM 重排</li>
+<li><strong>中期</strong>：开启 NCCL watchdog timeout（PyTorch 2.x 默认开），把 hang 转成 RuntimeError 让上层重启</li>
+<li><strong>长期</strong>：训练 launcher 包一层 healthcheck，每 N step 跑一次 1-byte all-reduce 作为心跳；任何 rank 失联自动 abort + restart from checkpoint</li>
+<li>权衡：超时设短了误杀长 collective（如启动期 broadcast 大权重），设长了响应慢；watchdog 触发的 abort 可能导致进程残留 GPU 占用</li>
+</ul>
+<h3 id="v10-q-6-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：dataloader 多进程死锁（pin_memory 与 fork 不兼容）只 hang dataloader rank</li>
+<li>变体：grad accumulation 跨 step 触发的 collective mismatch（不同 rank 走不同分支）</li>
+<li>易错：<code>NCCL_DEBUG=INFO</code> 输出量巨大 wraparound 看不到 root cause；用 <code>NCCL_DEBUG_FILE=/tmp/nccl.%h.%p.log</code> 落盘</li>
+<li>追问："NCCL 怎么知道 rank 数？"→ 启动时通过 RDZV / 环境变量明确告知</li>
+</ul>
+<h3 id="v10-q-6-s-6">6. 预防机制</h3>
+<ul>
+<li>launcher 默认注入 <code>TORCH_NCCL_BLOCKING_WAIT=1</code>、<code>TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC=600</code>、<code>TORCH_NCCL_TRACE_BUFFER_SIZE=20000</code></li>
+<li>训练前 pre-flight：<code>nccl-tests</code> 全节点跑一遍 baseline 带宽，低于阈值禁止启动</li>
+<li>监控：每 rank 暴露 step 心跳到 Prometheus，集中 dashboard 看哪个 rank stale</li>
+<li>SLURM prolog 自动记录 NCCL 版本、IB driver 版本到 job log</li>
+<li>季度演练：手动 kill -STOP 一个 rank 验证 watchdog 触发链路</li>
+</ul>
+<h3 id="v10-q-6-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：NCCL collective busy-wait spin，看似 SM 100% 实则全集群在等一个 rank。</li>
+<li>关键机制：某 rank dataloader 死锁 / GPU ECC / NIC flap 没投递数据，其它 rank 全卡 spin。</li>
+<li>修复 / 防御：开 watchdog + heartbeat + trace buffer，hang 转 RuntimeError 自动重启。</li>
+<li>面试加分关键词：TORCH_NCCL_BLOCKING_WAIT、HEARTBEAT_TIMEOUT、py-spy、flight recorder。</li>
+</ul>
+<h3 id="v10-q-6-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"GPU SM 100% 但不出 token、不报错"的核心症状？</li>
+<li>[ ] 你能不能解释 NCCL collective spin-wait 与 rank 失联的关系？</li>
+<li>[ ] 你能不能举一个类似场景（如 dataloader 死锁 / grad accum 跨 step collective mismatch）？</li>
+<li>[ ] 你能不能说出 4 个常用定位手段（NCCL_DEBUG、py-spy、heartbeat、dcgmi diag）？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-7"><span class="vchip">Vol 10</span><span class="qchip">Q7</span><span class="ttl">IB 与以太网混用，all-reduce 性能掉 10×：路由误配复盘</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-24"><span class="vchip">Vol 10</span><span class="qchip">Q24</span><span class="ttl">GPU 资源声明不匹配：作业拿到 4 卡却只能用 2 卡</span></a></li>
+    <li><a href="04-distributed-training.html#v04-q-55"><span class="vchip">Vol 04</span><span class="qchip">Q55</span><span class="ttl">多 NIC rail / topology-optimized routing 怎么配？Sibling NIC 检测怎么做？</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-25"><span class="vchip">Vol 10</span><span class="qchip">Q25</span><span class="ttl">节点失联检测延迟：30 分钟才发现节点死机训练全程在等</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-7"><span class="qchip">Q7</span>IB 与以太网混用，all-reduce 性能掉 10×：路由误配复盘</h2>
+<h3 id="v10-q-7-s-1">1. 现象</h3>
+<p>某新上线的训练集群跑 nccl-tests 基准时，节点内 all-reduce 带宽 480 GB/s 正常，但跨节点（2 节点 × 8 卡）只有 4 GB/s，明显远低于 InfiniBand HDR 200 Gbps × 8 NIC 应有的 ~150 GB/s。训练任务能起，但每 step 慢 10 倍以上。</p>
+<h3 id="v10-q-7-s-2">2. 根因层级原理</h3>
+<p>NCCL 在初始化时按一定规则选择网络后端：优先 IB（如果 <code>NCCL_IB_DISABLE=0</code> 且检测到 <code>mlx5_x</code> 设备）然后 NET/Socket。若节点上既有 IB HCA 又有以太网 NIC，且未通过 <code>NCCL_SOCKET_IFNAME</code> 限定接口，NCCL 可能选错——比如走了 management 的 1Gbps 以太网。或者更隐蔽：<code>NCCL_IB_HCA</code> 漏写导致只用一个 NIC（损失 8×），或者 IB SM 子网和路由没配 partition key（pkey），数据走了 fallback path。</p>
+<h3 id="v10-q-7-s-3">3. 定位手段与命令</h3>
+<ul>
+<li><code>NCCL_DEBUG=INFO</code> 启动看 <code>NCCL INFO Using network: IB / Socket</code>，确认实际选定 backend</li>
+<li><code>nccl-tests/all_reduce_perf -b 1G -e 1G -g 8</code> 在 2 节点跑出 algbw / busbw 对比 spec</li>
+<li><code>ibstat</code> / <code>ibstatus</code> 看 LinkUp + 速率</li>
+<li><code>ibdev2netdev</code> 确认 IB 设备与 net interface 的映射</li>
+<li><code>ip addr</code> + <code>ethtool</code> 看以太网接口速率</li>
+<li><code>NCCL_SOCKET_IFNAME=^docker,lo</code> 显式排除虚拟接口</li>
+</ul>
+<h3 id="v10-q-7-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：环境变量强制：<code>NCCL_IB_HCA=mlx5_0,mlx5_1,...,mlx5_7</code>、<code>NCCL_IB_GID_INDEX=3</code>、<code>NCCL_SOCKET_IFNAME=ib0</code>（或 RoCEv2 场景下对应）</li>
+<li><strong>中期</strong>：审视 SM/pkey 配置；多 rail 拓扑下开 <code>NCCL_IB_PCI_RELAXED_ORDERING=1</code>、<code>NCCL_NET_GDR_LEVEL=PHB</code></li>
+<li><strong>长期</strong>：网络运维侧固化 cluster-wide subnet manager 配置；image 里硬编码默认 NCCL 环境变量；起任务时 launcher 自动 detect 并打印 backend</li>
+<li>权衡：硬编码环境变量影响通用性；多 rail 配置在小集群收益不明显</li>
+</ul>
+<h3 id="v10-q-7-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：RoCEv2 场景下 PFC / ECN 配置不当导致丢包重传，吞吐塌方</li>
+<li>变体：跨 rack 路由跨多个 leaf-spine 跳，NCCL 不感知物理拓扑导致选边不优</li>
+<li>易错：以为"插上 IB 卡就是 IB 通信"——SDK 没装 / OFED 版本对不上时回退 socket</li>
+<li>追问："NVLS 在什么场景下生效？"→ NVL8/NVL72 内 + NCCL 2.20+ + 算法选 NVLS</li>
+</ul>
+<h3 id="v10-q-7-s-6">6. 预防机制</h3>
+<ul>
+<li>集群 image baseline：OFED / NCCL / driver 三件套版本固定，禁止业务侧覆盖</li>
+<li>pre-flight：<code>nccl-tests</code> 跑两节点 baseline，busbw 低于 SOTA 80% 禁止开训</li>
+<li>launcher 启动后第一行 log 打印 <code>NCCL_DEBUG_SUBSYS=INIT,NET</code> 输出，监控系统抓关键字 <code>Using network</code></li>
+<li>网络运维侧周期性跑 <code>ib_send_bw</code> 全链路压测</li>
+<li>文档化：每种机型的 <code>NCCL_IB_HCA</code> / <code>NCCL_SOCKET_IFNAME</code> 模板</li>
+</ul>
+<h3 id="v10-q-7-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：NCCL 走错网，跨节点全走 1 Gbps 管理网或漏用 NIC，性能掉 10×。</li>
+<li>关键机制：未限定 <code>NCCL_IB_HCA</code> / <code>NCCL_SOCKET_IFNAME</code> 时 NCCL 自由选择导致选错。</li>
+<li>修复 / 防御：环境变量强制 NIC + pre-flight nccl-tests + image baseline 锁版本。</li>
+<li>面试加分关键词：NCCL_IB_HCA、ibdev2netdev、busbw、NVLS、RoCEv2 PFC/ECN。</li>
+</ul>
+<h3 id="v10-q-7-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"跨节点 all-reduce 性能掉 10×"这一症状？</li>
+<li>[ ] 你能不能解释 NCCL 网络后端选择逻辑与误选场景？</li>
+<li>[ ] 你能不能举一个类似场景（如 RoCEv2 PFC 配错导致丢包重传）？</li>
+<li>[ ] 你能不能说出 pre-flight nccl-tests + image baseline 的防御组合？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-6"><span class="vchip">Vol 10</span><span class="qchip">Q6</span><span class="ttl">NCCL all-reduce hang：256 卡训练突然全卡 idle 复盘</span></a></li>
+    <li><a href="05-memory-communication-profiling.html#v05-q-67"><span class="vchip">Vol 05</span><span class="qchip">Q67</span><span class="ttl">场景题：NCCL all-reduce p99 从 30ms 涨到 200ms，怎么三层定位？</span></a></li>
+    <li><a href="05-memory-communication-profiling.html#v05-q-68"><span class="vchip">Vol 05</span><span class="qchip">Q68</span><span class="ttl">估算题：H100 NVL8 单机 70B BF16 FSDP2 训练每 step 的通信量 / HBM 带宽 / launch 次数</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-8"><span class="vchip">Vol 10</span><span class="qchip">Q8</span><span class="ttl">NVLink 拓扑不对称：相同模型同卡数训练吞吐差 30%</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-8"><span class="qchip">Q8</span>NVLink 拓扑不对称：相同模型同卡数训练吞吐差 30%</h2>
+<h3 id="v10-q-8-s-1">1. 现象</h3>
+<p>两台同型号 8×H100 节点跑同一份训练脚本，节点 A 单 step 1.20 s，节点 B 单 step 1.65 s。GPU 型号、CUDA、驱动、NCCL 全一致，温度功耗都正常。差异在节点 B 的 NVLink ring 带宽测出 320 GB/s 而 A 为 450 GB/s。</p>
+<h3 id="v10-q-8-s-2">2. 根因层级原理</h3>
+<p>H100 SXM 节点理想拓扑是 NVL8 全互联（每对 GPU 之间 4 条 NVLink，total 900 GB/s 双向）。但实际机器可能因为 (a) 某条 NVLink 物理故障被 disable（DCGM 报 link down），(b) NVSwitch 一颗芯片降级，(c) BIOS 配置切到了非对称拓扑（PCIe fallback），导致部分 GPU 间走 PCIe 而非 NVLink。NCCL 的 ring 算法会自动绕过坏链路，但重新构图后某些 hop 变长，整体 ring busbw 下降。</p>
+<h3 id="v10-q-8-s-3">3. 定位手段与命令</h3>
+<ul>
+<li><code>nvidia-smi nvlink -s</code> 看每条链路状态（<code>Inactive</code> 或 <code>Disabled</code> 即为问题）</li>
+<li><code>nvidia-smi topo -m</code> 看 GPU 间互联类型矩阵（<code>NV4</code> / <code>NV8</code> vs <code>PIX</code> / <code>PHB</code>）</li>
+<li><code>dcgmi diag -r 4</code> 包含 NVLink 健康检查</li>
+<li><code>nccl-tests/all_reduce_perf</code> 单节点 8 卡跑出 busbw 对比 spec（H100 ≈ 480 GB/s）</li>
+<li><code>nvidia-smi nvlink --getthroughput</code> 实时看每条链路流量</li>
+</ul>
+<h3 id="v10-q-8-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：把节点 B 标 drain，调度避开；任务重排到健康节点</li>
+<li><strong>中期</strong>：联系硬件运维查 NVSwitch 健康、重做 ECC 检查、必要时重启节点（部分 NVLink 软错误重启可恢复）</li>
+<li><strong>长期</strong>：硬件 RMA 走流程；image 启动时跑 NVLink 健康自检挂 metric</li>
+<li>权衡：drain 节点损失算力；硬件 RMA 周期长；强行用降级节点拖慢整任务（gang scheduling 下整批跟着慢）</li>
+</ul>
+<h3 id="v10-q-8-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：NVL72 GB200 系统中跨机柜的 NVLink 拓扑变化对算法选择影响更大</li>
+<li>变体：A100 NVSwitch 部分通道 ECC error 导致带宽缓慢退化（不一定 down）</li>
+<li>易错：以为"卡数对就行"，忽视拓扑健康；DCGM 默认采集间隔 30s 看不到瞬时链路抖动</li>
+<li>追问："为什么 ring algorithm 对 latency 不敏感对带宽敏感？"→ N-1 hops，每 hop 完整带宽</li>
+</ul>
+<h3 id="v10-q-8-s-6">6. 预防机制</h3>
+<ul>
+<li>节点入集群 burn-in 必跑 nccl-tests baseline + DCGM diag 4 级</li>
+<li>每节点暴露 <code>nvlink_link_count_active</code> metric，少于 spec 报警</li>
+<li>调度器（SLURM）gres 维度加 <code>nvlink_health=ok</code> 标签，自动避开 degraded 节点</li>
+<li>启动训练前 launcher 打印一次 <code>nvidia-smi topo -m</code>，diff 历史快照看是否退化</li>
+<li>周度 cron：自动跑全集群单节点 nccl-tests，结果落数据库做 trend</li>
+</ul>
+<h3 id="v10-q-8-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：NVLink 某条链路 down，ring 算法绕远路单节点吞吐掉 30%。</li>
+<li>关键机制：NVSwitch 故障 / 链路 disable 让 NCCL 重构图，部分 hop 走 PCIe。</li>
+<li>修复 / 防御：<code>nvidia-smi nvlink -s</code> 健康自检 + 调度 drain degraded 节点。</li>
+<li>面试加分关键词：nvlink_link_count_active、DCGM diag、ring busbw、NVL72 拓扑。</li>
+</ul>
+<h3 id="v10-q-8-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"同型号节点吞吐差 30%"的核心症状？</li>
+<li>[ ] 你能不能解释 NVLink 一条链路 down 后 ring 算法的影响？</li>
+<li>[ ] 你能不能举一个类似场景（如 A100 NVSwitch 通道 ECC 退化）？</li>
+<li>[ ] 你能不能说出 burn-in 健康自检与调度避开的防御组合？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-7"><span class="vchip">Vol 10</span><span class="qchip">Q7</span><span class="ttl">IB 与以太网混用，all-reduce 性能掉 10×：路由误配复盘</span></a></li>
+    <li><a href="11-posttraining-new-inference.html#v11-q-12"><span class="vchip">Vol 11</span><span class="qchip">Q12</span><span class="ttl">Blackwell B200 与 Hopper H100/H200 在训练 / 推理 infra 上的差异是什么？</span></a></li>
+    <li><a href="05-memory-communication-profiling.html#v05-q-68"><span class="vchip">Vol 05</span><span class="qchip">Q68</span><span class="ttl">估算题：H100 NVL8 单机 70B BF16 FSDP2 训练每 step 的通信量 / HBM 带宽 / launch 次数</span></a></li>
+    <li><a href="08-systems-foundations.html#v08-q-38"><span class="vchip">Vol 08</span><span class="qchip">Q38</span><span class="ttl">估算题：dataloader 在 H100 服务器（2 socket / 8 卡）上的最大吞吐与瓶颈</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-9"><span class="qchip">Q9</span>慢节点 straggler：1024 卡训练被 1 个 rank 拖慢 2×</h2>
+<h3 id="v10-q-9-s-1">1. 现象</h3>
+<p>1024 卡训练任务，监控显示集群整体吞吐只有理论值的 55%，但每个 rank 的 GPU SM 利用率显示 95%+。step time histogram 大部分 rank 在 1.0 s，少数（5–10 个）在 1.9 s，标准差异常大。任务跑得动但效率极差，每天浪费数千美元。</p>
+<h3 id="v10-q-9-s-2">2. 根因层级原理</h3>
+<p>同步训练（DDP / FSDP / Megatron）每 step 由最慢 rank 决定全局节奏。straggler 来源众多：(a) 某 GPU 因为温度高触发 thermal throttling（clock 降频），(b) PCIe 链路降级（x16 退到 x8），(c) ECC 软错误触发频繁 retry，(d) noisy neighbor（同节点其它进程抢 host CPU），(e) NUMA 不亲和导致内存访问跨 socket。每 rank GPU SM 利用率 95% 没问题——只是这 95% 跑得比别人慢。</p>
+<h3 id="v10-q-9-s-3">3. 定位手段与命令</h3>
+<ul>
+<li>上 HTA（Holistic Trace Analysis）跨 rank 对齐 trace，统计每个 rank 的 step time 分布，找尾部</li>
+<li>DCGM 采集每 GPU 的 <code>DCGM_FI_DEV_GPU_TEMP</code>、<code>DCGM_FI_DEV_SM_CLOCK</code>、<code>DCGM_FI_DEV_PCIE_LINK_GEN</code>、<code>DCGM_FI_DEV_PCIE_LINK_WIDTH</code></li>
+<li><code>lspci -vvv</code> 看 PCIe negotiated speed/width vs capability</li>
+<li><code>numactl --hardware</code> + <code>nvidia-smi topo -m</code> 看 NUMA 与 GPU 关联，结合 CPU 亲和性</li>
+<li>训练里嵌入轻量 timer：每 rank 上报 step time 到 Prometheus 看 p50/p99 differential</li>
+</ul>
+<h3 id="v10-q-9-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：定位 straggler 节点 drain 出去重排；如果是 thermal 调高 fan curve 或检查机房送风</li>
+<li><strong>中期</strong>：打开 GPU clock lock（<code>nvidia-smi -lgc max</code>）防止动态降频；NUMA 绑核（<code>numactl --cpunodebind</code>）</li>
+<li><strong>长期</strong>：训练框架引入 micro-batch level adaptive load balancing（如 unequal pipeline schedule）；冗余 rank（如 ZeRO++ / Bamboo 之类研究方案）容忍 straggler</li>
+<li>权衡：drain 节点损失部分算力；clock lock 提高功耗；冗余 rank 实现复杂；adaptive 在动态 workload 下不稳定</li>
+</ul>
+<h3 id="v10-q-9-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：bandwidth-bound 算法（如 all-gather）对 straggler 更敏感；compute-bound 反而能掩盖</li>
+<li>变体：dataloader 慢导致部分 rank step time 偶发突增</li>
+<li>易错：以为"所有卡 SM 都满了就没问题"——忽视绝对速度</li>
+<li>追问："流水线并行（pipeline parallelism）下 straggler 影响有什么不同？"→ bubble 拉长，整体 PP 利用率塌方</li>
+</ul>
+<h3 id="v10-q-9-s-6">6. 预防机制</h3>
+<ul>
+<li>训练 launcher 自带 step-time profiler，每 100 step 上报每 rank p99 step time</li>
+<li>监控：每 rank step time 偏离全局 p50 超过 20% 持续 5 分钟报警</li>
+<li>pre-flight：节点入集群必跑单卡 microbenchmark（matmul、all-reduce）通过基线</li>
+<li>DCGM 健康守护：thermal / PCIe link / ECC error rate 异常自动 drain</li>
+<li>调度器 epilog 上报 job 整体 throughput 到 metric，trend 异常触发审计</li>
+</ul>
+<h3 id="v10-q-9-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：同步训练被一个慢 rank 拖累，每张卡都"满载"但整体吞吐塌一半。</li>
+<li>关键机制：thermal throttle / PCIe 降级 / NUMA / ECC retry 让单 rank step time 翻倍。</li>
+<li>修复 / 防御：每 rank step time 上报 Prometheus + DCGM 自动 drain + clock lock。</li>
+<li>面试加分关键词：HTA、DCGM_FI_DEV_SM_CLOCK、PCIe link width、numactl。</li>
+</ul>
+<h3 id="v10-q-9-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"每张卡满载但整体 55%"的核心症状？</li>
+<li>[ ] 你能不能解释同步训练里最慢 rank 决定全局节奏这一同步语义？</li>
+<li>[ ] 你能不能举一个类似场景（如 noisy neighbor 抢 host CPU）？</li>
+<li>[ ] 你能不能说出 thermal、PCIe、NUMA、ECC 四类 straggler 来源？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-6"><span class="vchip">Vol 10</span><span class="qchip">Q6</span><span class="ttl">NCCL all-reduce hang：256 卡训练突然全卡 idle 复盘</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-12"><span class="vchip">Vol 10</span><span class="qchip">Q12</span><span class="ttl">Checkpoint 恢复耗时 1 小时：单 rank 串行加载 + 跨 NUMA 拷贝复盘</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-22"><span class="vchip">Vol 10</span><span class="qchip">Q22</span><span class="ttl">误发 SIGTERM 致整集群训练任务连锁退出：cleanup script bug 复盘</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-1"><span class="vchip">Vol 10</span><span class="qchip">Q1</span><span class="ttl">训练中途突发 CUDA OOM，但显存监控显示余量充足：梯度累计显存洪峰复盘</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-10"><span class="qchip">Q10</span>NCCL 版本偏差 + 节点镜像漂移，跨节点通信功能错乱</h2>
+<h3 id="v10-q-10-s-1">1. 现象</h3>
+<p>训练任务在测试环境（4 节点）跑通，扩到生产 64 节点后，第一个 step 还没完就出 <code>NCCL WARN ncclInternalError</code> + <code>peer mismatch</code>。回滚到 16 节点又能跑，扩 64 又坏，复现稳定但难定位。</p>
+<h3 id="v10-q-10-s-2">2. 根因层级原理</h3>
+<p>NCCL 协议在不同小版本间 wire format 偶尔不兼容（特别是 2.18 → 2.20 NVLS 引入、2.22 引入新算法切换逻辑）。集群规模扩大后，不同节点 image 版本漂移概率上升：有的节点装的是 NCCL 2.18（包在 PyTorch wheel 里），有的节点系统装了 2.21（OFED 包带的），调度时随机分到一起。即使主版本一致，CUDA driver / OFED / <code>NCCL_PROTO</code>（LL/LL128/Simple）差异也可能让两端协议状态机走偏。</p>
+<h3 id="v10-q-10-s-3">3. 定位手段与命令</h3>
+<ul>
+<li><code>NCCL_DEBUG=INFO</code> 在每节点启动时打印 NCCL 版本号，集中比对</li>
+<li><code>python -c "import torch; print(torch.cuda.nccl.version())"</code> 看 PyTorch 内置版本</li>
+<li><code>ldd $(python -c "import torch; print(torch.__file__)" | head)/lib/libtorch_cuda.so</code> 看实际链接的 NCCL 路径</li>
+<li><code>dpkg -l | grep -i nccl</code> 或 <code>rpm -qa | grep nccl</code> 看系统包</li>
+<li>启动时打印 <code>cat /proc/driver/nvidia/version</code>、OFED 版本、kernel 版本统一收集</li>
+</ul>
+<h3 id="v10-q-10-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：把所有节点 NCCL 强制统一到 PyTorch 自带版本（<code>LD_LIBRARY_PATH</code> 干掉系统路径）</li>
+<li><strong>中期</strong>：修 image 漂移流程，所有节点 image 重建 + 重灌；准入检查脚本作为 SLURM prolog</li>
+<li><strong>长期</strong>：image 治理 / 不可变基础设施（每次更新走全量重建而非增量 patch）；SBOM 记录每节点 ML 组件版本，调度只挑同版本</li>
+<li>权衡：强制 PyTorch 自带版本会失去某些系统优化（如 NVLS）；image 重建周期长；准入检查太严会拒掉有效节点</li>
+</ul>
+<h3 id="v10-q-10-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：CUDA driver 版本漂移导致 PTX JIT 编译路径不同，部分 kernel 行为差异</li>
+<li>变体：OFED 与 NCCL 版本组合矩阵很大，某些组合官方未测试</li>
+<li>易错：以为 <code>pip install</code> 的 PyTorch 自带 NCCL 就万事大吉——LD_LIBRARY_PATH 优先级会覆盖</li>
+<li>追问："NVLS 是什么版本引入的？"→ NCCL 2.18 起，需要 driver R535+</li>
+</ul>
+<h3 id="v10-q-10-s-6">6. 预防机制</h3>
+<ul>
+<li>集群 image 治理：所有节点 OS / driver / OFED / CUDA / NCCL 版本统一锁定，差异即报警</li>
+<li>SLURM prolog 收集每节点 6 件套版本号上报 metric，dashboard 看版本分布</li>
+<li>启动 launcher 第一步：<code>nvidia-smi --query-gpu=driver_version --format=csv</code>、<code>echo $NCCL_VERSION</code>、<code>ibstat | grep Firmware</code>，diff 全集群打印</li>
+<li>pre-flight：跨 N 节点 nccl-tests 必通过且 busbw 在阈值内</li>
+<li>image 升级走灰度（5% → 25% → 100%），每阶段跑 baseline 训练对比指标</li>
+</ul>
+<h3 id="v10-q-10-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：16 节点能跑 64 节点必崩，集群里某些节点 NCCL/OFED/driver 版本漂了。</li>
+<li>关键机制：NCCL wire format 小版本不兼容 + image 漂移概率随规模上升。</li>
+<li>修复 / 防御：image 治理 / 不可变基础设施 + SLURM prolog 收集版本 + LD_LIBRARY_PATH 干掉系统路径。</li>
+<li>面试加分关键词：NCCL 2.18 NVLS、ldd 链接、image baseline、SBOM。</li>
+</ul>
+<h3 id="v10-q-10-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"规模相关的稳定复现 hang"这一症状指纹？</li>
+<li>[ ] 你能不能解释 NCCL 版本协议状态机与 wire format 的关系？</li>
+<li>[ ] 你能不能举一个类似场景（如 OFED 与 NCCL 组合矩阵踩坑）？</li>
+<li>[ ] 你能不能说出 image 治理与准入检查的防御组合？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="03-cuda-triton-custom-ops.html#v03-q-6"><span class="vchip">Vol 03</span><span class="qchip">Q6</span><span class="ttl">如何用 Nsight Compute 分析 kernel 性能？关注哪些 metrics？</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-11"><span class="vchip">Vol 10</span><span class="qchip">Q11</span><span class="ttl">Checkpoint 静默损坏：恢复训练发现 loss 飞涨追溯文件 corruption</span></a></li>
+    <li><a href="05-memory-communication-profiling.html#v05-q-69"><span class="vchip">Vol 05</span><span class="qchip">Q69</span><span class="ttl">设计题：万卡集群显存与通信可观测性栈（OOM / 掉速 5 分钟定位）</span></a></li>
+    <li><a href="11-posttraining-new-inference.html#v11-q-25"><span class="vchip">Vol 11</span><span class="qchip">Q25</span><span class="ttl">长上下文 1M+ 训练与推理实战</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-11"><span class="qchip">Q11</span>Checkpoint 静默损坏：恢复训练发现 loss 飞涨追溯文件 corruption</h2>
+<h3 id="v10-q-11-s-1">1. 现象</h3>
+<p>某次训练任务因节点故障重启，从最近一次 checkpoint（保存在 Lustre）恢复后，loss 从恢复前的 1.8 突然跳到 12+，几个 step 内变 NaN。回退到再上一个 checkpoint 同样问题。回退到三个之前的才能正常恢复，意味着最近 2 个 checkpoint 文件在不知不觉中已损坏。</p>
+<h3 id="v10-q-11-s-2">2. 根因层级原理</h3>
+<p>Checkpoint 写入是一个非原子的、跨多文件的过程。常见 corruption 来源：(a) 写到一半节点崩溃，文件被截断但没有 fsync（POSIX 不保证 mtime 与文件完整性一致）；(b) 异步保存（FSDP2 / <code>torch.distributed.checkpoint</code> async API）的 staging buffer 还没全部 flush，主线程已经移走旧 ckpt；(c) Lustre / GPFS 在客户端 cache flush 失败时不向上层报错，文件 size 看起来对但内容是 0；(d) tar / zip 打包过程中 inode 变化文件丢页。这些情况下恢复时反序列化能成功，但权重某些层是垃圾值，loss 立即发散。</p>
+<h3 id="v10-q-11-s-3">3. 定位手段与命令</h3>
+<ul>
+<li>写入侧：保存后立刻 <code>sha256sum</code> 整个目录写入 <code>.manifest</code>；恢复时校验</li>
+<li>读出侧：<code>torch.load(map_location='cpu')</code> + 遍历 <code>state_dict()</code> 检查每个 tensor <code>is_finite().all()</code>、<code>norm()</code> 在合理范围</li>
+<li>文件系统：<code>stat -c '%s %y' file</code> 比对预期 size；<code>lfs check</code> Lustre 文件健康</li>
+<li><code>strings</code> / <code>xxd | head</code> 看文件头是否是合法 magic</li>
+<li>历史 step 的 weight norm trend：如果某层权重 L2 norm 突然非线性跳变，是损坏证据</li>
+</ul>
+<h3 id="v10-q-11-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：回退到更老 checkpoint；接受丢失的步数</li>
+<li><strong>中期</strong>：保存流程改成"写到临时目录 → fsync → rename → 删旧"原子模式；保存后立刻读回校验（read-back validation）</li>
+<li><strong>长期</strong>：上 <code>torch.distributed.checkpoint</code>（DCP）的 sharded format + per-rank 校验和；引入冗余 checkpoint（保留最近 K 个 + 每 N 个长期归档）</li>
+<li>权衡：read-back 校验拖慢保存周期；冗余 checkpoint 占用存储 K×；DCP 切换需要改恢复路径</li>
+</ul>
+<h3 id="v10-q-11-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：保存被 <code>rsync</code> 拖到对象存储途中失败，目标端文件 size 0</li>
+<li>变体：FSDP2 async save 与下一个 step 的 grad update 竞态导致部分 shard 是新版部分是旧版（mismatch）</li>
+<li>易错：<code>torch.save</code> 默认不 fsync 的，靠 Python <code>with</code> 退出关闭只 flush 用户态 buffer</li>
+<li>追问："为什么用 rename 是原子的？"→ POSIX 保证 same-FS rename 原子；跨 FS 的 mv 实际是 cp+rm 不原子</li>
+</ul>
+<h3 id="v10-q-11-s-6">6. 预防机制</h3>
+<ul>
+<li>写入侧封装 <code>safe_save(state, path)</code>：写到 <code>.tmp</code> → <code>os.fsync(fileno)</code> → <code>os.rename</code></li>
+<li>每次 save 后异步 read-back + sha256 校验，写入 <code>.manifest.json</code></li>
+<li>训练 launcher 启动时校验最近 ckpt manifest，损坏自动 fallback 到上一个</li>
+<li>监控：每个 ckpt 的 weight norm trend，跳变 &gt; 3 sigma 报警</li>
+<li>长期归档：每 N 个 ckpt copy 一份到对象存储 versioned bucket</li>
+</ul>
+<h3 id="v10-q-11-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：ckpt 反序列化能成但权重是垃圾值，loss 跳变 / 飞涨追溯文件 corruption。</li>
+<li>关键机制：写一半崩、没 fsync、async staging 与下一 step 竞态、FS 客户端 cache flush 失败。</li>
+<li>修复 / 防御：<code>safe_save</code>：tmp + fsync + rename + sha256 manifest + read-back 校验。</li>
+<li>面试加分关键词：原子 rename、torch.distributed.checkpoint、weight norm 监控、冗余 ckpt。</li>
+</ul>
+<h3 id="v10-q-11-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"恢复后 loss 飞涨"的核心症状？</li>
+<li>[ ] 你能不能解释非原子写入与 fsync 缺失的因果？</li>
+<li>[ ] 你能不能举一个类似场景（如 rsync 中断 / FSDP2 async 竞态）？</li>
+<li>[ ] 你能不能说出 tmp+fsync+rename+manifest 的防御链？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-15"><span class="vchip">Vol 10</span><span class="qchip">Q15</span><span class="ttl">异步 checkpoint 与下一 step 竞态：FSDP2 async save 部分 shard 是旧版</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-12"><span class="vchip">Vol 10</span><span class="qchip">Q12</span><span class="ttl">Checkpoint 恢复耗时 1 小时：单 rank 串行加载 + 跨 NUMA 拷贝复盘</span></a></li>
+    <li><a href="04-distributed-training.html#v04-q-44"><span class="vchip">Vol 04</span><span class="qchip">Q44</span><span class="ttl">训练任务的 fault tolerance？elastic training 的实现？</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-2"><span class="vchip">Vol 10</span><span class="qchip">Q2</span><span class="ttl">长序列训练激活显存爆炸：Selective activation checkpointing 失效复盘</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-12"><span class="qchip">Q12</span>Checkpoint 恢复耗时 1 小时：单 rank 串行加载 + 跨 NUMA 拷贝复盘</h2>
+<h3 id="v10-q-12-s-1">1. 现象</h3>
+<p>某 175B 模型训练，每次因节点故障重启加载 checkpoint 耗时近 60 分钟，期间 GPU 全闲。一周内累计因 reload 浪费 ~10% 算力。监控显示加载阶段单节点 IO 吞吐 ~200 MB/s，远低于 Lustre / NVMe 标称值。</p>
+<h3 id="v10-q-12-s-2">2. 根因层级原理</h3>
+<p>传统 <code>torch.save</code> 产出的是 single-file pickle，恢复时只能由 rank 0 读完后 broadcast，整个流程串行：read（受单 client 带宽限）→ deserialize → broadcast（受 NCCL 带宽限）→ 各 rank load_state_dict。175B × 2 bytes ≈ 350 GB，单 client Lustre 读取上限 1–2 GB/s 的话光 read 就 3–6 分钟，但 broadcast 阶段更慢——大 tensor 经过 host 内存（pinned 或非 pinned）+ 跨 NUMA + GPU peer copy，环节多瓶颈在某一段。再加上 deserialize 时反复 alloc/free 主存碎片化。</p>
+<h3 id="v10-q-12-s-3">3. 定位手段与命令</h3>
+<ul>
+<li>加载阶段加细粒度 timer：<code>read_file</code>、<code>deserialize</code>、<code>broadcast</code>、<code>apply_to_module</code> 分别计时</li>
+<li><code>iotop</code> / <code>iostat -x 1</code> 实时看磁盘 / 网络 IO</li>
+<li><code>numastat -p $PID</code> 看跨 NUMA 内存分配</li>
+<li><code>nvidia-smi dmon -s u</code> 看 GPU 等待时间</li>
+<li>Lustre 客户端：<code>lfs getstripe</code> 看条带配置，单文件单 stripe 时单 client 受限</li>
+</ul>
+<h3 id="v10-q-12-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：把 ckpt 切成多个 shard，多 rank 并行读（手动按层切分）</li>
+<li><strong>中期</strong>：切到 <code>torch.distributed.checkpoint</code>（DCP），原生 sharded + 多 rank 并行 IO；Lustre 上 <code>lfs setstripe -c 8</code> 让单文件多 OST 分布</li>
+<li><strong>长期</strong>：异步加载 + checkpoint 流水化（边读边 apply 部分 layer）；用对象存储 multipart parallel get；FSDP2 集成 DCP 默认即多 rank 并行</li>
+<li>权衡：DCP 改造需要重训现有 ckpt 或转换工具；Lustre 条带配置太宽对小文件反而劣化；异步加载工程复杂度高</li>
+</ul>
+<h3 id="v10-q-12-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：S3 单 object 单连接限速 ~50–100 MB/s，没用 multipart 时极慢</li>
+<li>变体：恢复时 optimizer state 比 model 还大但同样串行加载</li>
+<li>易错：以为 <code>map_location='cuda:0'</code> 就快——实际还是单 GPU 接收；要每 rank 直接 load 本 shard</li>
+<li>追问："为什么 DCP 比 torch.save 快？"→ 每 rank 自己读自己的 shard，IO 并行 N×</li>
+</ul>
+<h3 id="v10-q-12-s-6">6. 预防机制</h3>
+<ul>
+<li>训练默认上 DCP，所有新模型 day-1 用 sharded ckpt</li>
+<li>启动时先打印预估恢复时间（基于 ckpt 大小 + 集群 IO 标称值），超阈值警告</li>
+<li>Lustre / GPFS 团队提供条带配置 best-practice 文档；存储路径分类（hot ckpt / cold archive）</li>
+<li>pre-flight：first epoch 结束后跑一次完整 save+load round-trip 验证耗时</li>
+<li>监控：load 耗时 metric trend，超过历史 p95 1.5× 告警</li>
+</ul>
+<h3 id="v10-q-12-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：单文件 ckpt + rank 0 broadcast 在 175B 量级注定卡死 60 分钟。</li>
+<li>关键机制：read 受单 client 带宽限 + broadcast 跨 NUMA + alloc 碎片，串行链路太长。</li>
+<li>修复 / 防御：切 DCP sharded + Lustre setstripe + 异步加载流水化。</li>
+<li>面试加分关键词：torch.distributed.checkpoint、lfs setstripe、multipart parallel get。</li>
+</ul>
+<h3 id="v10-q-12-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"reload 60 分钟 GPU 全闲"的核心症状？</li>
+<li>[ ] 你能不能解释单文件 broadcast 的串行链路瓶颈在哪里？</li>
+<li>[ ] 你能不能举一个类似场景（如 S3 单 object 单连接限速）？</li>
+<li>[ ] 你能不能说出 DCP 比 torch.save 快的根本原因（每 rank 自读 shard）？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-2"><span class="vchip">Vol 10</span><span class="qchip">Q2</span><span class="ttl">长序列训练激活显存爆炸：Selective activation checkpointing 失效复盘</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-1"><span class="vchip">Vol 10</span><span class="qchip">Q1</span><span class="ttl">训练中途突发 CUDA OOM，但显存监控显示余量充足：梯度累计显存洪峰复盘</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-11"><span class="vchip">Vol 10</span><span class="qchip">Q11</span><span class="ttl">Checkpoint 静默损坏：恢复训练发现 loss 飞涨追溯文件 corruption</span></a></li>
+    <li><a href="04-distributed-training.html#v04-q-44"><span class="vchip">Vol 04</span><span class="qchip">Q44</span><span class="ttl">训练任务的 fault tolerance？elastic training 的实现？</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-13"><span class="qchip">Q13</span>S3 限速触发 SlowDown：分布式 checkpoint 上传雪崩</h2>
+<h3 id="v10-q-13-s-1">1. 现象</h3>
+<p>某次训练把 ckpt 同步上传 S3 作为长期归档，1024 rank 同时发起 multipart upload 后，AWS 返回大量 <code>503 SlowDown</code> + <code>RequestTimeTooSkewed</code>，部分 part 重试 5 次后失败，整个 ckpt 没传完，下一次 save 又叠加上来，最终训练 hang 在 save 阶段。</p>
+<h3 id="v10-q-13-s-2">2. 根因层级原理</h3>
+<p>S3 对单 prefix 有 request rate limit（PUT/COPY/POST/DELETE 默认 3500 req/s/prefix，GET 5500 req/s/prefix）。1024 rank × multipart × 多 part = 瞬时几万 QPS，全打到同一 ckpt prefix 立即触发限速。S3 SDK 默认 retry 带指数退避，但所有 client 同步退避后又同时重试形成 thundering herd。叠加时钟漂移 <code>RequestTimeTooSkewed</code>（节点 NTP 偏离超过 15 分钟），更让重试失败率居高不下。</p>
+<h3 id="v10-q-13-s-3">3. 定位手段与命令</h3>
+<ul>
+<li>AWS S3 metrics：<code>5xxErrors</code> + <code>4xxErrors</code> + <code>AllRequests</code> 看请求曲线和错误率</li>
+<li>CloudTrail 看具体错误码分布</li>
+<li>客户端 SDK 日志：<code>boto3</code> 的 retry 次数 metric</li>
+<li><code>chronyc tracking</code> / <code>timedatectl</code> 看 NTP 偏移</li>
+<li>抓包 <code>tcpdump host s3.amazonaws.com</code> 看 503 响应频率</li>
+</ul>
+<h3 id="v10-q-13-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：减小并发上传数（aggregate 上传：rank 0 收集所有 shard 再串行/有限并发上传）；jitter retry 退避</li>
+<li><strong>中期</strong>：prefix 散列化（路径加 hash 前缀分散到多 partition）；用 S3 Transfer Manager 自动管理 multipart concurrency</li>
+<li><strong>长期</strong>：上 S3 Multi-Region Access Points 或专用 high-throughput bucket；换 R2/MinIO 等无固定限速的存储；本地落 + 后台异步推</li>
+<li>权衡：rank 0 aggregate 让 rank 0 成为瓶颈；prefix 散列影响列表查询；专用 bucket 成本高</li>
+</ul>
+<h3 id="v10-q-13-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：GCS / Azure Blob 也有类似限速但门槛不同；混云时不能套同样并发</li>
+<li>变体：multipart upload 未 abort 的残留 part 长期累积成本，需要 lifecycle 清理</li>
+<li>易错：以为 S3 "无限扩展"——是 prefix 维度自动 scale，但短时突发仍被 throttle</li>
+<li>追问："如何提高单 prefix 限速？"→ 实际无法直接提，要联系 AWS support 或拆 prefix</li>
+</ul>
+<h3 id="v10-q-13-s-6">6. 预防机制</h3>
+<ul>
+<li>上传客户端默认开 jitter retry + bounded concurrency（如每节点 ≤ 4 connection）</li>
+<li>ckpt path 模板里加随机前缀：<code>s3://bucket/{rand4}/jobs/{jobid}/step{N}/</code></li>
+<li>监控 S3 5xx rate，&gt; 1% 告警；客户端侧 <code>s3.upload_failure_rate</code></li>
+<li>训练框架提供 <code>local_first_then_async_upload</code> 模式（先落本地，后台异步推 S3）</li>
+<li>NTP 健康检查作为 SLURM prolog 必过项</li>
+</ul>
+<h3 id="v10-q-13-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：1024 rank 同 prefix 推 multipart 瞬间几万 QPS 触发 503 SlowDown 雪崩。</li>
+<li>关键机制：S3 单 prefix 限速 3500 PUT/s + 同步退避 + thundering herd。</li>
+<li>修复 / 防御：prefix 散列 + bounded concurrency + jitter retry + 本地落异步推。</li>
+<li>面试加分关键词：multi-part upload、Transfer Manager、RequestTimeTooSkewed、lifecycle 清理。</li>
+</ul>
+<h3 id="v10-q-13-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"训练 hang 在 save 阶段"的核心症状？</li>
+<li>[ ] 你能不能解释 S3 prefix 限速与 thundering herd 的因果？</li>
+<li>[ ] 你能不能举一个类似场景（如 GCS / Azure Blob 限速）？</li>
+<li>[ ] 你能不能说出 prefix 散列、bounded concurrency、本地落三种防御？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="13-recommendation-inference.html#v13-q-8"><span class="vchip">Vol 13</span><span class="qchip">Q8</span><span class="ttl">序列推荐模型（SASRec / BERT4Rec）与 KV cache 形态</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-15"><span class="vchip">Vol 10</span><span class="qchip">Q15</span><span class="ttl">异步 checkpoint 与下一 step 竞态：FSDP2 async save 部分 shard 是旧版</span></a></li>
+    <li><a href="05-memory-communication-profiling.html#v05-q-54"><span class="vchip">Vol 05</span><span class="qchip">Q54</span><span class="ttl">torch.distributed.checkpoint（DCP）实战：保存、加载、resume？</span></a></li>
+    <li><a href="04-distributed-training.html#v04-q-15"><span class="vchip">Vol 04</span><span class="qchip">Q15</span><span class="ttl">如何实现自定义的分布式优化器？继承 torch.optim.Optimizer 的注意事项？</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-14"><span class="qchip">Q14</span>Lustre 配额耗尽，训练任务静默写入失败</h2>
+<h3 id="v10-q-14-s-1">1. 现象</h3>
+<p>某项目共享 Lustre 目录配额 50 TB，多个训练任务并发写 ckpt + log。某天凌晨配额满，新写入返回 <code>EDQUOT</code>，但训练框架未把 IO 错误当 fatal，task 继续跑只是 ckpt 全部静默失败。第二天早上发现过去 10 小时所有 save 都没成功，节点崩溃后无 ckpt 可恢复。</p>
+<h3 id="v10-q-14-s-2">2. 根因层级原理</h3>
+<p>Lustre 配额有两类：block quota（容量）和 inode quota（文件数）。耗尽时新建/扩展操作返回 <code>EDQUOT</code>。问题在 (a) Python <code>open(..., 'wb')</code> + write + close 在某些情况下错误只在 close 时显现，而很多代码 <code>try: torch.save(...) except: log.warning(...)</code> 把它降级成 warning；(b) <code>torch.save</code> 内部 pickle 写入失败可能只丢 partial 文件而不抛异常；(c) 多任务共享配额，谁是凶手不易定位。</p>
+<h3 id="v10-q-14-s-3">3. 定位手段与命令</h3>
+<ul>
+<li><code>lfs quota -u $USER /lustre/path</code> 看用户配额；<code>lfs quota -g $GROUP</code> 看组配额</li>
+<li><code>df -h</code> 与 <code>lfs df -h</code> 看 OST 整体使用率</li>
+<li><code>lfs find /lustre/path -size +1G</code> 找大文件</li>
+<li><code>lfs find /lustre/path -type d -name 'step*' | xargs -I{} du -sh {}</code> 找占用大户</li>
+<li>从 application log grep <code>EDQUOT</code> / <code>Disk quota exceeded</code> 关键字</li>
+</ul>
+<h3 id="v10-q-14-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：清理临时文件、过期 ckpt 释放空间；联系存储管理员加配额</li>
+<li><strong>中期</strong>：训练代码捕获 IO 异常并 fail-fast（不再静默 warning）；保存前先 statvfs 校验剩余空间；keep-last-K 策略自动回收旧 ckpt</li>
+<li><strong>长期</strong>：分级存储：热 ckpt 在 Lustre，冷 ckpt 自动归档对象存储；预算治理（每项目配额 + 用量看板）</li>
+<li>权衡：fail-fast 可能让任务因临时空间不足直接挂掉；自动归档增加复杂度；分级存储引入读取延迟</li>
+</ul>
+<h3 id="v10-q-14-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：inode 配额耗尽（小文件太多，例如 MoE 每 expert 一个文件）也触发同样症状</li>
+<li>变体：GPFS / WekaFS 错误码不同（<code>EDQUOT</code> vs <code>ENOSPC</code>）但症状类似</li>
+<li>易错：以为 <code>df -h</code> 看够用就行，忽视用户/组配额</li>
+<li>追问："Lustre 元数据延迟为什么慢？"→ MDS 中心化节点；OST 数据本身分布</li>
+</ul>
+<h3 id="v10-q-14-s-6">6. 预防机制</h3>
+<ul>
+<li>训练 launcher pre-flight：检查目标存储配额剩余 &gt; 当前任务预估写入量 × 3</li>
+<li>保存代码模板：用 <code>pathlib</code> + <code>os.statvfs</code> 校验空间；任何 IO 异常 raise 而非 warn</li>
+<li>监控：用户/组配额使用率 &gt; 85% 告警</li>
+<li>Cleanup cron：每天清理 <code>tmp/</code>、保留最近 K 个 ckpt（其它移冷库）</li>
+<li>用量看板：每项目按 PI 维度展示存储使用 trend</li>
+</ul>
+<h3 id="v10-q-14-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：配额满 <code>EDQUOT</code> 被 except 吞掉，10 小时静默无 ckpt。</li>
+<li>关键机制：close 时才报错 + 框架 except 降级 warning + 多任务共享配额。</li>
+<li>修复 / 防御：fail-fast + statvfs 预检 + keep-last-K + 用量看板。</li>
+<li>面试加分关键词：lfs quota、inode quota、EDQUOT、分级存储归档。</li>
+</ul>
+<h3 id="v10-q-14-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"训练在跑但 ckpt 全部静默失败"的核心症状？</li>
+<li>[ ] 你能不能解释为什么 IO 错误会在 close 时才显现？</li>
+<li>[ ] 你能不能举一个类似场景（如 inode 配额耗尽 MoE 小文件）？</li>
+<li>[ ] 你能不能说出 fail-fast + 预检 + 用量看板的防御组合？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="04-distributed-training.html#v04-q-44"><span class="vchip">Vol 04</span><span class="qchip">Q44</span><span class="ttl">训练任务的 fault tolerance？elastic training 的实现？</span></a></li>
+    <li><a href="07-training-inference-platform.html#v07-q-70"><span class="vchip">Vol 07</span><span class="qchip">Q70</span><span class="ttl">SLURM 故障节点的自动重启与恢复怎么做？ReconfigFailedJob、Resv、节点 quarantine？</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-11"><span class="vchip">Vol 10</span><span class="qchip">Q11</span><span class="ttl">Checkpoint 静默损坏：恢复训练发现 loss 飞涨追溯文件 corruption</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-13"><span class="vchip">Vol 10</span><span class="qchip">Q13</span><span class="ttl">S3 限速触发 SlowDown：分布式 checkpoint 上传雪崩</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-15"><span class="qchip">Q15</span>异步 checkpoint 与下一 step 竞态：FSDP2 async save 部分 shard 是旧版</h2>
+<h3 id="v10-q-15-s-1">1. 现象</h3>
+<p>某 FSDP2 训练任务开了 <code>async_save=True</code>，原本期望保存与计算重叠隐藏 IO 时延。运行几天后偶发出现"恢复后 loss 跳变 + 慢慢恢复"现象（不像完全损坏，像是部分参数是 N-1 step 的）。复盘时发现保存目录里某些 shard 文件的 mtime 比其它晚 1 个 step time。</p>
+<h3 id="v10-q-15-s-2">2. 根因层级原理</h3>
+<p>FSDP2 的 async save 工作机制：保存时把 sharded state 拷到 staging buffer，主流程立即返回继续训练；后台线程把 buffer 写入磁盘。问题在 (a) staging buffer 拷贝若不是真正的 deep copy（比如只是 record stream），下一 step 的 in-place update 会污染待写入数据；(b) 不同 shard 写入完成时间不同，某些 shard 已写完，某些还在 buffer 里被新 step 改掉；(c) atomic rename 是 per-shard 的，全局没有 commit 屏障。结果是恢复时拼出来的 state 是"step N 的 shard A + step N+1 的 shard B"——逻辑上不一致。</p>
+<h3 id="v10-q-15-s-3">3. 定位手段与命令</h3>
+<ul>
+<li>检查 ckpt 目录下每个 shard 文件 mtime 是否一致：<code>find ckpt/ -name '*.distcp' -printf '%T@ %p\n' | sort</code></li>
+<li>在每个 shard metadata 里写入 <code>step_id</code>、<code>global_step</code>，恢复时校验全部一致</li>
+<li>启用 PyTorch DCP 的 <code>async_save_blocking_wait</code> 选项，验证非异步路径能恢复正确</li>
+<li>对比恢复后的 weight 与训练时的 in-memory weight 是否完全一致</li>
+</ul>
+<h3 id="v10-q-15-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：关 <code>async_save=True</code>，回到 sync save（损失 IO 隐藏但保证一致性）</li>
+<li><strong>中期</strong>：用真正 deep copy 的 staging（snapshot tensor 而非 reference）；引入 commit barrier，所有 shard 全部 fsync 后才更新 manifest 指向</li>
+<li><strong>长期</strong>：双 buffer ping-pong，写期间禁止 in-place 改对应 buffer；用 <code>torch.distributed.checkpoint</code> 的官方 async API（v2.5+ 已修这类问题）</li>
+<li>权衡：deep copy 要 2× 显存或 2× 主存；commit barrier 串行化降低 async 收益；版本升级回归测试成本</li>
+</ul>
+<h3 id="v10-q-15-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：DeepSpeed 的 universal checkpoint 也有类似 async 一致性边界</li>
+<li>变体：optimizer state 与 model state 分文件保存，恢复时如果时间错位也是同款问题</li>
+<li>易错：以为 mtime 一致就是一致——实际写入顺序依赖 OS 调度</li>
+<li>追问："commit barrier 为什么能保证一致性？"→ 全局 happens-before：旧 manifest 指向 N-1，新 manifest 在所有 shard 落盘后原子翻转</li>
+</ul>
+<h3 id="v10-q-15-s-6">6. 预防机制</h3>
+<ul>
+<li>默认 sync save 起步，async save 只在压测验证过的版本启用</li>
+<li>每个 ckpt 写入完成后跑自动一致性校验（global_step 全 shard 一致 + manifest 完整）</li>
+<li>框架版本升级走灰度，关注 release note 中 async save 相关 bugfix</li>
+<li>监控：恢复后 first step loss 与 save 时 loss diff 超过 ε 报警</li>
+<li>季度演练：人为在 async save 中 kill 进程，验证恢复行为符合预期</li>
+</ul>
+<h3 id="v10-q-15-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：async save shard 写入时间错位，恢复出来部分参数是 step N-1 的"幽灵 state"。</li>
+<li>关键机制：staging buffer 不是真 deep copy + 无 commit barrier，下一 step in-place update 污染。</li>
+<li>修复 / 防御：默认 sync save + deep copy snapshot + 全 shard fsync 后翻 manifest + global_step 校验。</li>
+<li>面试加分关键词：commit barrier、happens-before、global_step manifest、双 buffer。</li>
+</ul>
+<h3 id="v10-q-15-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"恢复后 loss 跳一下慢慢恢复"的特征？</li>
+<li>[ ] 你能不能解释 staging buffer 与 in-place update 的竞态机制？</li>
+<li>[ ] 你能不能举一个类似场景（如 optimizer state 与 model state 分文件时间错位）？</li>
+<li>[ ] 你能不能说出 deep copy + commit barrier + manifest 校验的防御链？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-11"><span class="vchip">Vol 10</span><span class="qchip">Q11</span><span class="ttl">Checkpoint 静默损坏：恢复训练发现 loss 飞涨追溯文件 corruption</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-13"><span class="vchip">Vol 10</span><span class="qchip">Q13</span><span class="ttl">S3 限速触发 SlowDown：分布式 checkpoint 上传雪崩</span></a></li>
+    <li><a href="05-memory-communication-profiling.html#v05-q-54"><span class="vchip">Vol 05</span><span class="qchip">Q54</span><span class="ttl">torch.distributed.checkpoint（DCP）实战：保存、加载、resume？</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-2"><span class="vchip">Vol 10</span><span class="qchip">Q2</span><span class="ttl">长序列训练激活显存爆炸：Selective activation checkpointing 失效复盘</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-16"><span class="qchip">Q16</span>vLLM continuous batching 死锁：waiting queue 堆积但 running queue 不前进</h2>
+<h3 id="v10-q-16-s-1">1. 现象</h3>
+<p>某线上 vLLM 推理服务突发 hang：所有新请求进入 <code>waiting</code> 状态后不再前进，已有 <code>running</code> 请求也不出 token，但服务进程不挂、health check 仍返回 200。<code>vllm:num_requests_running</code> 与 <code>vllm:num_requests_waiting</code> 同时非零且 5 分钟无变化。重启进程立即恢复，但每隔几小时复发。</p>
+<h3 id="v10-q-16-s-2">2. 根因层级原理</h3>
+<p>vLLM 调度器在每个 step 决定哪些 seq 推理、哪些被 preempt。死锁场景：(a) 所有 running seq 都因 KV block 不足被标记为 preempt 候选，但 preempt 后释放的 block 又被新 prefill 请求立刻抢走，原 seq 永远等不到 block 回来；(b) prefix cache 引用计数泄漏，某 block "占用中"但实际没人用；(c) 自定义 logit processor 抛异常被吞，scheduler 状态不一致。结果是状态机进入"running 不能 decode、waiting 不能 prefill、preempt 释放被立刻抢"的活锁。</p>
+<h3 id="v10-q-16-s-3">3. 定位手段与命令</h3>
+<ul>
+<li><code>py-spy dump --pid &amp;lt;vllm_pid&amp;gt;</code> 抓 Python 栈，看是不是卡在某个 lock</li>
+<li>vLLM metrics：<code>vllm:num_preempted_total</code> rate 异常高 + <code>gpu_cache_usage</code> 100% 是典型 fingerprint</li>
+<li><code>curl http://localhost:8000/metrics</code> + 自定义 debug endpoint dump scheduler 内部状态</li>
+<li>启动加 <code>--max-num-seqs=...</code> 与 <code>--max-num-batched-tokens=...</code> 显式上限，看是否避开</li>
+<li>复现侧：录一段 prompt 长度分布回放，二分定位</li>
+</ul>
+<h3 id="v10-q-16-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：自动 watchdog 监测 step 无进展超过 30 s 自动重启进程</li>
+<li><strong>中期</strong>：升级 vLLM 到 V1（重写的 scheduler，活锁场景已 fix）；调小 <code>max_num_seqs</code> 留 KV block 余量；关掉 prefix cache 验证是否引用计数 bug</li>
+<li><strong>长期</strong>：scheduler 加 priority aging（waiting 时间长的优先级提升）防饥饿；引入 fairness 算法</li>
+<li>权衡：watchdog 重启会丢正在跑的请求；vLLM V1 升级回归测试成本；关 prefix cache 损失 cache hit 性能</li>
+</ul>
+<h3 id="v10-q-16-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：SGLang / TensorRT-LLM 的 continuous batching 调度有自己的 corner case</li>
+<li>变体：推测解码（speculative decoding）引入 draft seq 后 KV 占用计算更复杂</li>
+<li>易错：以为重启服务"治本"——实际只是把状态清空，根因在调度器逻辑</li>
+<li>追问："continuous batching 与 static batching 区别？"→ token-level 而非 request-level，长短请求混排吞吐高</li>
+</ul>
+<h3 id="v10-q-16-s-6">6. 预防机制</h3>
+<ul>
+<li>watchdog：监测 <code>metrics_step_count</code> 增量，连续 N 秒不变自动重启</li>
+<li>灰度：每个 vLLM 版本上生产前必跑 24h 压测覆盖长短 prompt 混合 + 高 preempt 场景</li>
+<li>监控：<code>preempt_rate</code> p95 &gt; 阈值 + <code>cache_usage</code> &gt; 95% 持续 → 自动扩容 / 降级</li>
+<li>vLLM 升级走 canary（5% 流量先打），观察一周再全量</li>
+<li>引入 chaos test：随机注入超长 prompt 验证调度稳定性</li>
+</ul>
+<h3 id="v10-q-16-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：scheduler 活锁——preempt 释放的 block 立刻被新 prefill 抢走，running 永远不前进。</li>
+<li>关键机制：所有 running 因 KV 不足被标 preempt，但释放后被新请求秒抢，状态机环停。</li>
+<li>修复 / 防御：watchdog step-no-progress 重启 + 升级 vLLM V1 + 留 KV 余量 + priority aging。</li>
+<li>面试加分关键词：num_preempted_total、prefix cache 引用计数、admission control、fairness。</li>
+</ul>
+<h3 id="v10-q-16-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"health 200 但 5 分钟不出 token"的活锁症状？</li>
+<li>[ ] 你能不能解释 preempt-prefill 互抢导致的状态机活锁？</li>
+<li>[ ] 你能不能举一个类似场景（如 prefix cache 引用计数泄漏）？</li>
+<li>[ ] 你能不能说出 watchdog 重启与 vLLM V1 升级两条修复路径？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="11-posttraining-new-inference.html#v11-q-22"><span class="vchip">Vol 11</span><span class="qchip">Q22</span><span class="ttl">场景题：8 张 H200 + 70B Llama + 32k 上下文 + SLO TTFT&lt;500ms TPOT&lt;50ms，怎么部署？</span></a></li>
+    <li><a href="13-recommendation-inference.html#v13-q-7"><span class="vchip">Vol 13</span><span class="qchip">Q7</span><span class="ttl">vLLM-GR 思路：把 LLM 推理框架适配推荐</span></a></li>
+    <li><a href="12-aigc-generation-infra.html#v12-q-22"><span class="vchip">Vol 12</span><span class="qchip">Q22</span><span class="ttl">图像生成 vs LLM 文本推理工程差异</span></a></li>
+    <li><a href="09-strategy-engineering-decisions.html#v09-q-34"><span class="vchip">Vol 09</span><span class="qchip">Q34</span><span class="ttl">设计题：LLM 平台成本治理体系</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-17"><span class="qchip">Q17</span>推理服务 KV cache 内存泄漏：长跑后 OOM 与 cache hit rate 下滑</h2>
+<h3 id="v10-q-17-s-1">1. 现象</h3>
+<p>推理服务部署 7 天后开始周期性 OOM 重启，每次重启间隔从初期 24h 缩短到 6h。<code>vllm:gpu_cache_usage</code> 长期居高不下，prefix cache hit rate 从 60% 慢慢降到 20%。重启后立即恢复，运行越久越糟。</p>
+<h3 id="v10-q-17-s-2">2. 根因层级原理</h3>
+<p>KV block 通过引用计数管理生命周期：seq 引用 → ref++，seq 结束 → ref--，到 0 时回收。泄漏来源：(a) 异常路径未正确释放（请求超时被网关 abort 但 vLLM 内部 ref 没减）；(b) prefix cache 的 trie 节点逻辑 bug 导致某些 hash key 永远 alive；(c) LoRA 适配器卸载时漏释放对应 KV；(d) tool calling / function calling 请求结构嵌套带来的 ref 路径未覆盖。结果：可用 block 数随时间单调下降，cache hit 因 evict 越来越频繁也下滑。</p>
+<h3 id="v10-q-17-s-3">3. 定位手段与命令</h3>
+<ul>
+<li>长跑监控 <code>vllm:num_total_blocks - vllm:num_free_blocks</code> trend，正常应在 [0, max] 周期波动；如果 floor 持续抬升即为泄漏</li>
+<li>vLLM <code>--enable-metrics</code> + 自定义 debug endpoint dump block ref 表</li>
+<li><code>tracemalloc</code> 或 <code>memray</code> 抓 Python 侧泄漏（KV 是显存但元数据是 Python 对象）</li>
+<li>对比有无 LoRA、有无 tool call、有无超时三种 traffic 的泄漏速率</li>
+<li><code>nvidia-smi --query-compute-apps=pid,used_memory --format=csv</code> 看 vLLM 进程占用 trend</li>
+</ul>
+<h3 id="v10-q-17-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：设 <code>max_lifetime</code> 周期性重启（蓝绿部署）；降级关 prefix cache</li>
+<li><strong>中期</strong>：升级到修复对应泄漏的 vLLM 版本；自定义 LoRA 卸载路径手动释放 KV</li>
+<li><strong>长期</strong>：引入 KV block 审计——周期性扫描 ref 表与活跃 seq 比对，发现孤儿 block 强制回收 + 报警</li>
+<li>权衡：周期性重启会丢正在跑的请求需要 graceful drain；强制回收可能误杀正常 cache</li>
+</ul>
+<h3 id="v10-q-17-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：SGLang radix attention cache 也有类似引用计数 bug</li>
+<li>变体：Triton Inference Server 的 model warmup buffer 没释放</li>
+<li>易错：以为 OOM 是流量增长——其实是 floor 在涨，需要看 trend 而非瞬时</li>
+<li>追问："prefix cache 怎么实现 trie？"→ 按 token id chunk hash，trie 节点指向 KV block</li>
+</ul>
+<h3 id="v10-q-17-s-6">6. 预防机制</h3>
+<ul>
+<li>长跑健康指标：<code>free_block_floor</code>（每小时最低值），单调下降即泄漏</li>
+<li>蓝绿部署默认开 <code>max_lifetime=72h</code> 强制周期性 rotate</li>
+<li>vLLM 升级前先在 staging 跑 7 天 longevity test</li>
+<li>每个 vLLM 版本的 release note 关注 "memory leak" / "ref count" 关键字</li>
+<li>chaos：注入超时、客户端断连、LoRA 频繁切换的 traffic pattern 验证无泄漏</li>
+</ul>
+<h3 id="v10-q-17-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：KV block 引用计数泄漏，free block floor 随时间单调下降，最终 OOM。</li>
+<li>关键机制：异常路径 / prefix cache trie / LoRA 卸载漏减 ref，孤儿 block 永远不回收。</li>
+<li>修复 / 防御：周期性蓝绿 max_lifetime + free_block_floor 监控 + 升级修复版本 + chaos test。</li>
+<li>面试加分关键词：free_block_floor 趋势、tracemalloc/memray、graceful drain、ref 表审计。</li>
+</ul>
+<h3 id="v10-q-17-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"OOM 周期从 24h 缩到 6h"的趋势特征？</li>
+<li>[ ] 你能不能解释 ref count 泄漏与 cache hit 下滑的连带因果？</li>
+<li>[ ] 你能不能举一个类似场景（如 SGLang radix cache / Triton warmup buffer）？</li>
+<li>[ ] 你能不能说出 free_block_floor 单调下降这一关键 metric 的意义？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-4"><span class="vchip">Vol 10</span><span class="qchip">Q4</span><span class="ttl">推理服务 KV cache OOM：长 prompt 突发流量打爆显存</span></a></li>
+    <li><a href="06-inference-quantization-serving.html#v06-q-62"><span class="vchip">Vol 06</span><span class="qchip">Q62</span><span class="ttl">SGLang RadixAttention 实现原理</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-16"><span class="vchip">Vol 10</span><span class="qchip">Q16</span><span class="ttl">vLLM continuous batching 死锁：waiting queue 堆积但 running queue 不前进</span></a></li>
+    <li><a href="06-inference-quantization-serving.html#v06-q-53"><span class="vchip">Vol 06</span><span class="qchip">Q53</span><span class="ttl">vLLM / SGLang 调度器调优实战（chunked prefill、prefix cache hit、preemption 策略）？</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-18"><span class="qchip">Q18</span>推理请求超时雪崩：上游重试放大流量 3× 击穿后端</h2>
+<h3 id="v10-q-18-s-1">1. 现象</h3>
+<p>某长 prompt 客户端请求 p99 时延突破 30 s 客户端超时，client 自动重试。3 分钟内后端 QPS 从 1× 涨到 3×，所有请求开始排队，p50 也突破 timeout，全链路 5xx。SRE 介入限流后服务恢复，但根因不是"流量真涨了"。</p>
+<h3 id="v10-q-18-s-2">2. 根因层级原理</h3>
+<p>重试雪崩经典模型：客户端超时 → 重试 → 后端已 overload 处理慢 → 更多超时 → 更多重试 → 容量被同一请求多次占用。LLM 推理特别容易触发：(a) 长 prompt prefill 耗时本就接近 timeout 阈值，小波动就 trigger；(b) 重试请求与原请求 prompt 完全相同，prefix cache 命中度高但已经在跑的不会被合并；(c) 推理是有状态的（KV 缓存），重试不能复用已生成的部分，全部从头算，浪费翻倍；(d) 没有 hedging（受控并行）只有盲重试。</p>
+<h3 id="v10-q-18-s-3">3. 定位手段与命令</h3>
+<ul>
+<li>客户端日志看每请求的 retry count</li>
+<li>网关层（Envoy / nginx）retry policy 配置审计</li>
+<li>后端 access log：按 <code>request_id</code> group 看是否同 ID 多次到达（如果 client 用幂等 key）</li>
+<li>Prometheus：<code>http_requests_total{status=~"5.."}</code> 与 <code>client_retry_total</code> 关联</li>
+<li>抓一次故障 traffic 回放，对比有无重试</li>
+</ul>
+<h3 id="v10-q-18-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：网关层禁用自动重试（或改成只在 5xx 且 idempotent 时重试 1 次）；服务端加 <code>Retry-After</code> header 引导客户端退避</li>
+<li><strong>中期</strong>：服务端 admission control（队列长度超阈值直接 4xx 拒绝而非排队）；客户端 SDK 内置 jitter exp backoff</li>
+<li><strong>长期</strong>：流量隔离——长 prompt 走独立 pool，避免拖垮短 prompt SLO；引入 hedged request（同时打 2 个并取先返回）只在受控并发下用</li>
+<li>权衡：禁重试会让瞬时网络抖动表现为失败；admission control 提高 4xx 但保护后端；hedging 增加成本</li>
+</ul>
+<h3 id="v10-q-18-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：load balancer 健康检查超时把节点踢掉导致剩余节点更过载</li>
+<li>变体：streaming 响应客户端断连后服务端继续生成浪费算力</li>
+<li>易错：以为"加机器就行"——加机器在雪崩中也会被打满</li>
+<li>追问："为什么 LLM 重试比 REST API 更危险？"→ 状态成本高、prefill 不可中断、单请求 GPU 占用大</li>
+</ul>
+<h3 id="v10-q-18-s-6">6. 预防机制</h3>
+<ul>
+<li>网关 retry policy 严格规范化（禁默认无脑重试）</li>
+<li>客户端 SDK 强制 jitter + max retry=2 + circuit breaker</li>
+<li>SLO 体系：TTFT / TPOT / p99 三指标分级，p99 超阈值自动降级（拒部分流量）</li>
+<li>每季度跑混沌演练：人为注入慢响应观察重试雪崩防线</li>
+<li>服务端 idle connection drain：客户端断连立即终止生成省算力</li>
+</ul>
+<h3 id="v10-q-18-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：客户端超时盲重试在 LLM 上放大流量 3×，prefill 不可中断让代价更大。</li>
+<li>关键机制：长 prompt 接近 timeout 阈值 + 重试不能复用 KV + 没有 hedging，雪崩成型。</li>
+<li>修复 / 防御：禁默认重试 + admission control + 长短 prompt 流量隔离 + 客户端 jitter+circuit breaker。</li>
+<li>面试加分关键词：Retry-After、hedged request、TTFT/TPOT SLO、idle connection drain。</li>
+</ul>
+<h3 id="v10-q-18-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"QPS 3× 但用户没多打"的雪崩特征？</li>
+<li>[ ] 你能不能解释 LLM 重试比 REST API 更危险的三个原因？</li>
+<li>[ ] 你能不能举一个类似场景（如 streaming 断连服务端继续生成）？</li>
+<li>[ ] 你能不能说出网关重试规范化 + admission control 的防御组合？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-4"><span class="vchip">Vol 10</span><span class="qchip">Q4</span><span class="ttl">推理服务 KV cache OOM：长 prompt 突发流量打爆显存</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-27"><span class="vchip">Vol 10</span><span class="qchip">Q27</span><span class="ttl">场景：周五下午 5 点推理服务 P99 飙升 + region 5xx，30 分钟决策路径</span></a></li>
+    <li><a href="07-training-inference-platform.html#v07-q-74"><span class="vchip">Vol 07</span><span class="qchip">Q74</span><span class="ttl">SLURM 失败重试策略怎么设计？exit-code-based、time-limit-based、应用级 checkpoint resume？</span></a></li>
+    <li><a href="09-strategy-engineering-decisions.html#v09-q-34"><span class="vchip">Vol 09</span><span class="qchip">Q34</span><span class="ttl">设计题：LLM 平台成本治理体系</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-19"><span class="qchip">Q19</span>FP8 量化推理数值漂移：上线后某些任务准确率掉 5%</h2>
+<h3 id="v10-q-19-s-1">1. 现象</h3>
+<p>某模型从 BF16 量化到 FP8 (E4M3) 推理上线，整体 throughput 提升 1.8×，BLEU / MMLU 整体打分下降 0.3 pp 在可接受范围。但用户反馈数学题与代码生成任务正确率明显下降，离线复现显示这两类掉 4–6 pp。</p>
+<h3 id="v10-q-19-s-2">2. 根因层级原理</h3>
+<p>FP8 (E4M3) 表示范围窄（max ≈ 448），需要 per-tensor 或 per-channel scale 量化。问题在 (a) calibration 数据集若主要是普通对话，没有覆盖数学/代码场景的极端 activation 分布，scale 选偏；(b) attention 中间 softmax 后 logits 的 outlier 在 FP8 下被 saturate；(c) 累加用 FP8 而非 FP32 累加器导致误差累积；(d) GEMM A/B 用 FP8 但 epilog 没用更高精度，多层叠加误差非线性放大。结果是对噪声敏感的任务（精确推理类）准确率塌方。</p>
+<h3 id="v10-q-19-s-3">3. 定位手段与命令</h3>
+<ul>
+<li>分任务 eval：MMLU 各 subject、HumanEval、GSM8K 分别打分对比 BF16</li>
+<li>中间层 activation distribution 抓样：layer-wise 看 FP8 与 BF16 的 cosine similarity，找漂移最严重的层</li>
+<li><code>transformer_engine</code> profile，看哪些层用了 FP8 哪些 fallback BF16</li>
+<li>A/B 灰度：5% 流量 FP8、95% BF16，对每类请求分桶比对结果</li>
+</ul>
+<h3 id="v10-q-19-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：回滚到 BF16；或部分关键层（attention softmax、最后 lm_head）保留 BF16 走 mixed-precision</li>
+<li><strong>中期</strong>：扩展 calibration 集覆盖 math/code/long-context；用 SmoothQuant / AWQ 类技术处理 outlier</li>
+<li><strong>长期</strong>：上 FP8 per-channel scale + Hadamard rotation outlier suppression；切到 NVFP4 / MXFP4（Blackwell 起精度更好）</li>
+<li>权衡：mixed precision 工程复杂度高；扩展 calibration 集需要数据；新硬件需要换机；per-channel 比 per-tensor 慢但更准</li>
+</ul>
+<h3 id="v10-q-19-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：INT4 / INT8 量化的零点 / 对称量化选择不当</li>
+<li>变体：长上下文 RoPE 位置编码下 attention score 在 FP8 下 underflow</li>
+<li>易错：以为 "throughput 涨了 + 整体 score 没怎么掉" 就 OK，忽视分任务方差</li>
+<li>追问："E4M3 与 E5M2 怎么选？"→ E4M3 forward（动态范围窄但精度高）、E5M2 backward（gradient 范围大）</li>
+</ul>
+<h3 id="v10-q-19-s-6">6. 预防机制</h3>
+<ul>
+<li>量化上线必须分任务 eval（不只看综合分数），任一类掉 &gt; 1pp 阻断上线</li>
+<li>Calibration 集 release 流程：数据多样性 audit</li>
+<li>灰度比例≥ 7 天观察期，含异常样本回归</li>
+<li>监控：在线 A/B 持续打分（影子流量同时跑 BF16 ref）</li>
+<li>长期 trend：每 release 跑全套 eval suite 进数据库做 trend，回归即报警</li>
+</ul>
+<h3 id="v10-q-19-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：FP8 整体打分通过但数学 / 代码任务掉 4–6pp，calibration 没覆盖 outlier 分布。</li>
+<li>关键机制：E4M3 表示范围窄 + 关键层 outlier saturate + 累加用 FP8 精度损失叠加。</li>
+<li>修复 / 防御：分任务 eval 阻断上线 + per-channel scale + SmoothQuant/AWQ + 关键层 BF16 mixed。</li>
+<li>面试加分关键词：transformer_engine、E4M3 vs E5M2、Hadamard rotation、NVFP4/MXFP4。</li>
+</ul>
+<h3 id="v10-q-19-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"综合分通过但分任务掉 5%"的核心症状？</li>
+<li>[ ] 你能不能解释 FP8 outlier saturate 与累加精度的因果？</li>
+<li>[ ] 你能不能举一个类似场景（如 RoPE 长上下文 attention score underflow）？</li>
+<li>[ ] 你能不能说出 calibration、per-channel scale、mixed precision 三种防御？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="11-posttraining-new-inference.html#v11-q-14"><span class="vchip">Vol 11</span><span class="qchip">Q14</span><span class="ttl">FP4 训练需要哪些数值技巧？为什么不是简单的"把 FP8 量化代码改成 FP4"？</span></a></li>
+    <li><a href="14-domestic-chips-heterogeneous.html#v14-q-17"><span class="vchip">Vol 14</span><span class="qchip">Q17</span><span class="ttl">场景题：从 0 设计一个国产芯片 LLM 推理平台</span></a></li>
+    <li><a href="12-aigc-generation-infra.html#v12-q-15"><span class="vchip">Vol 12</span><span class="qchip">Q15</span><span class="ttl">SDXL 服务化吞吐 vs 时延权衡（batch size / step 数 / resolution）</span></a></li>
+    <li><a href="03-cuda-triton-custom-ops.html#v03-q-41"><span class="vchip">Vol 03</span><span class="qchip">Q41</span><span class="ttl">Blackwell 架构关键变化（FP4、第二代 Transformer Engine、SM / L2 容量）</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-20"><span class="qchip">Q20</span>Autoscaler 抖动：流量小波动触发扩缩容震荡</h2>
+<h3 id="v10-q-20-s-1">1. 现象</h3>
+<p>推理服务接 K8s HPA 按 GPU utilization 自动扩缩容。流量平稳时实例数应该稳定在 8 个，但实际监控显示在 6–12 之间频繁震荡，每 10 分钟一次扩缩，每次扩容耗时 90s（vLLM 加载模型慢），用户感受到周期性 p99 抖动。</p>
+<h3 id="v10-q-20-s-2">2. 根因层级原理</h3>
+<p>HPA 默认按瞬时指标 + cooldown 决策。LLM 推理特殊：(a) 实例 cold start 90s（模型加载 + cuda graph 编译 + warmup），HPA cooldown 默认 5 分钟太短；(b) GPU utilization 是噪声大的指标——continuous batching 下利用率波动大但不代表过载；(c) 缩容时正在跑的请求被打断或要 graceful drain，drain 时间又比扩容长；(d) 多个副本同时被踢导致剩下的瞬时过载，触发扩容——形成震荡。</p>
+<h3 id="v10-q-20-s-3">3. 定位手段与命令</h3>
+<ul>
+<li>HPA 决策日志：<code>kubectl describe hpa &amp;lt;name&amp;gt;</code> + <code>kubectl get events</code></li>
+<li>Prometheus 看决策指标 trend：<code>avg(gpu_utilization)</code> 与 <code>replicas</code> 时间对齐</li>
+<li>模型加载耗时分布：<code>vllm:engine_load_seconds</code></li>
+<li>缩容时已存在的请求处理延迟：<code>graceful_drain_seconds</code> p99</li>
+</ul>
+<h3 id="v10-q-20-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：调大 HPA cooldown（<code>scaleDown.stabilizationWindowSeconds=600</code>）；用更平滑的指标（5 分钟移动平均）</li>
+<li><strong>中期</strong>：换 KEDA + 业务级指标（如 <code>queue_depth</code> 或 <code>pending_tokens</code>）做扩缩；按业务时段做 schedule-based scaling</li>
+<li><strong>长期</strong>：predictive scaling（基于 traffic 时间序列预测）；warm pool 保留 N 个 ready-but-idle 副本快速激活；推理服务设计成快速冷启动（lazy load + cuda graph cache）</li>
+<li>权衡：cooldown 大反应慢；KEDA 引入额外组件；warm pool 浪费成本；predictive 需要数据科学投入</li>
+</ul>
+<h3 id="v10-q-20-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：基于 request rate 扩缩对长尾 prompt 不公平（长 prompt 算力远大于平均）</li>
+<li>变体：GPU MIG 切片 autoscaler 无法区分 slice 类型</li>
+<li>易错：以为利用率高就需要扩容——其实 LLM 满载 90% 是 healthy</li>
+<li>追问："为什么 cold start 这么慢？"→ 几十 GB 权重 IO + cuda graph capture + warmup forward</li>
+</ul>
+<h3 id="v10-q-20-s-6">6. 预防机制</h3>
+<ul>
+<li>扩缩策略走 schedule + reactive 双轨：固定时段最低 baseline + 突发反应</li>
+<li>自定义业务指标：<code>pending_tokens</code> / <code>tokens_per_second_capacity</code> 比 GPU util 准</li>
+<li>模型 cold start 优化：常驻 warm pool ≥ 2，永远不缩到 0</li>
+<li>监控：scale event 频率 trend，每小时 &gt; 3 次报警</li>
+<li>周度演练：人造流量波形验证扩缩稳定性</li>
+</ul>
+<h3 id="v10-q-20-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：HPA 按 GPU util 套通用模板必然震荡，cold start 90s 远长于决策窗口。</li>
+<li>关键机制：噪声大的瞬时指标 + 短 cooldown + drain 慢 + 缩容后剩余瞬时过载触发再扩。</li>
+<li>修复 / 防御：KEDA + pending_tokens 业务指标 + 大 cooldown + warm pool 不缩到 0。</li>
+<li>面试加分关键词：stabilizationWindow、predictive scaling、cuda graph cache、graceful drain。</li>
+</ul>
+<h3 id="v10-q-20-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"副本 6–12 之间每 10 分钟震荡"的核心症状？</li>
+<li>[ ] 你能不能解释 GPU util 为何不是 LLM 推理的好指标？</li>
+<li>[ ] 你能不能举一个类似场景（如 MIG 切片 autoscaler 失语义）？</li>
+<li>[ ] 你能不能说出 schedule + reactive 双轨 + warm pool 的防御组合？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="09-strategy-engineering-decisions.html#v09-q-14"><span class="vchip">Vol 09</span><span class="qchip">Q14</span><span class="ttl">推理峰谷扩缩容：触发门槛与最小副本数</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-4"><span class="vchip">Vol 10</span><span class="qchip">Q4</span><span class="ttl">推理服务 KV cache OOM：长 prompt 突发流量打爆显存</span></a></li>
+    <li><a href="06-inference-quantization-serving.html#v06-q-18"><span class="vchip">Vol 06</span><span class="qchip">Q18</span><span class="ttl">推理服务的 auto-scaling 策略？基于 GPU 利用率还是请求队列？</span></a></li>
+    <li><a href="13-recommendation-inference.html#v13-q-12"><span class="vchip">Vol 13</span><span class="qchip">Q12</span><span class="ttl">推荐系统 fleet 调度与容量规划</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-21"><span class="qchip">Q21</span>Spot 抢占雪崩：高优任务突发挤掉 100 个低优任务连锁失败</h2>
+<h3 id="v10-q-21-s-1">1. 现象</h3>
+<p>某共享 ML 平台同时跑训练（低优 spot）与推理（高优 reserved）。某次推理流量突发触发集群扩容，调度器为腾资源批量 preempt 低优任务。100+ 训练任务同时收到 SIGTERM，30 秒后被 SIGKILL，大部分没完成 graceful checkpoint。重新调度时又集中冲击调度器，集群 30 分钟内调度延迟从 2s 涨到 5 分钟。</p>
+<h3 id="v10-q-21-s-2">2. 根因层级原理</h3>
+<p>调度器 preempt 决策通常按"释放最少资源满足请求"逻辑，但实现常见缺陷：(a) 没有 preempt rate limit，瞬间释放数百节点；(b) graceful period 默认值（30s）对 LLM 训练 ckpt 不够（保存 350 GB ckpt 需要分钟级）；(c) 被 preempt 的任务自动 requeue 全部进同一队列，竞争同样资源，formed thundering herd；(d) 集群没有缓冲池，preempt 完资源立即被新任务占满，没给原任务回来的机会。</p>
+<h3 id="v10-q-21-s-3">3. 定位手段与命令</h3>
+<ul>
+<li>调度器日志（SLURM <code>slurmctld.log</code> / K8s <code>kube-scheduler</code> log）grep <code>preempt</code></li>
+<li>时间序列：被 preempt 任务数 / 重调度 latency / queue depth 三条线对齐</li>
+<li><code>sacct -X --state=PREEMPTED --starttime=$T</code> 看具体事件</li>
+<li>节点视角：<code>scontrol show node &amp;lt;n&amp;gt;</code> 看 reason 与 reboot count</li>
+<li>训练 log：被 preempt 任务有没有完成 ckpt（看 <code>last_save_step</code> vs 退出 step）</li>
+</ul>
+<h3 id="v10-q-21-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：调度器配 preempt rate limit（每分钟最多 N 节点）；增大 graceful period 到 5–10 分钟匹配 ckpt 时长</li>
+<li><strong>中期</strong>：训练框架支持 SIGTERM 触发"快照后退出"逻辑，监听并尽量 best-effort save；requeue 走 priority aging 防新任务挤老任务</li>
+<li><strong>长期</strong>：预留 buffer pool（5–10% 节点不调度新任务），preempt 时让原任务有缓冲；分集群部署（推理与训练物理隔离）</li>
+<li>权衡：rate limit 让推理扩容慢；buffer pool 浪费 5–10% 资源；隔离丧失资源池化效率</li>
+</ul>
+<h3 id="v10-q-21-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：spot reclaim 通知时长（AWS 120s、GCP/Azure 30s）远短于 ckpt 时间</li>
+<li>变体：MPS / MIG 共享 GPU 上 preempt 行为更复杂</li>
+<li>易错：以为"会自动重排"就 OK——重排成功不等于无损失</li>
+<li>追问："为什么 K8s preemption 比 SLURM 简单？"→ K8s pod 短暂、SLURM job 长且 stateful</li>
+</ul>
+<h3 id="v10-q-21-s-6">6. 预防机制</h3>
+<ul>
+<li>训练框架默认每 N step + SIGTERM 触发都尝试 save；<code>atexit</code> 钩子保底</li>
+<li>launcher 的 entrypoint trap SIGTERM 转发给训练进程，给 graceful 时间</li>
+<li>调度器配置必检项：preempt rate limit、graceful period ≥ 5 min、requeue priority aging</li>
+<li>监控：preempt 频次 / ckpt 完成率 / requeue 后 step 0 重训量</li>
+<li>季度 chaos：人造突发推理流量验证训练任务存活率</li>
+</ul>
+<h3 id="v10-q-21-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：高优突发挤掉一批低优训练，30s graceful 远不够 350GB ckpt 保存。</li>
+<li>关键机制：无 preempt rate limit + graceful period 短 + requeue thundering herd。</li>
+<li>修复 / 防御：rate limit + 5–10 min graceful + buffer pool + SIGTERM 触发快照后退出。</li>
+<li>面试加分关键词：priority aging、physical 隔离、atexit hook、spot reclaim 通知。</li>
+</ul>
+<h3 id="v10-q-21-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"100 个训练任务连锁失败"的核心症状？</li>
+<li>[ ] 你能不能解释 30s graceful 与 LLM ckpt 时长不匹配的根因？</li>
+<li>[ ] 你能不能举一个类似场景（如 AWS spot reclaim 120s 通知）？</li>
+<li>[ ] 你能不能说出 rate limit + graceful period + buffer pool 的防御组合？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="07-training-inference-platform.html#v07-q-79"><span class="vchip">Vol 07</span><span class="qchip">Q79</span><span class="ttl">Spot/preemptible 实例怎么跟 ML 训练配合？checkpoint 频率、抢占信号、健壮性？</span></a></li>
+    <li><a href="07-training-inference-platform.html#v07-q-63"><span class="vchip">Vol 07</span><span class="qchip">Q63</span><span class="ttl">SLURM preempt / requeue 策略怎么设计？SignalHandler、checkpoint 集成怎么做？</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-28"><span class="vchip">Vol 10</span><span class="qchip">Q28</span><span class="ttl">估算：万卡训练集群在 5% 年故障率下，端到端有效训练时间占比</span></a></li>
+    <li><a href="07-training-inference-platform.html#v07-q-16"><span class="vchip">Vol 07</span><span class="qchip">Q16</span><span class="ttl">训练任务的 preemption 和 checkpoint &amp; resume？</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-22"><span class="qchip">Q22</span>误发 SIGTERM 致整集群训练任务连锁退出：cleanup script bug 复盘</h2>
+<h3 id="v10-q-22-s-1">1. 现象</h3>
+<p>某周末凌晨，平台运维提交一个看似无害的 cleanup PR：定期清理 <code>/tmp</code> 下过期文件。脚本通过 systemd timer 在每节点跑。脚本里 <code>pkill -TERM -f 'tmp_'</code> 这一行，意外把训练进程主目录在 <code>/tmp_train_xxx</code> 的 ~200 个 rank 全部杀掉。集群所有 LLM 训练任务退出，损失 ~6 小时算力。</p>
+<h3 id="v10-q-22-s-2">2. 根因层级原理</h3>
+<p><code>pkill -f</code> 匹配的是完整命令行（<code>/proc/PID/cmdline</code>）而非可执行名，正则 <code>tmp_</code> 会匹配任何 cmdline 含此字符串的进程。训练进程的工作目录或某 arg 含 <code>/tmp_train_xxx</code> 路径就被命中。这类问题的本质是：(a) destructive 命令的匹配范围审视不足；(b) 没有 dry-run / shellcheck / staging；(c) cleanup 脚本以 root 跑权限太大；(d) systemd timer 全节点同时执行，没分批。</p>
+<h3 id="v10-q-22-s-3">3. 定位手段与命令</h3>
+<ul>
+<li><code>journalctl -u &amp;lt;cleanup-timer&amp;gt;</code> 看脚本执行历史</li>
+<li>训练任务 log：所有 rank 同时收到 SIGTERM 是不正常的，正常 preempt 不会这么整齐</li>
+<li><code>auditd</code> / <code>sysdig</code> 审计哪个进程发了 SIGTERM</li>
+<li>时间序列对齐：cleanup script 执行时间 vs 训练任务退出时间</li>
+<li><code>ps -ef</code> 模拟 + <code>pgrep -f 'tmp_'</code> 看会命中哪些进程（事后 dry-run）</li>
+</ul>
+<h3 id="v10-q-22-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：禁用 cleanup timer；逐节点重启训练任务恢复</li>
+<li><strong>中期</strong>：把 <code>pkill -f</code> 换成更精确的匹配（按 uid + cmdline 组合）；加 <code>--dry-run</code> 默认行为；改用 <code>find -mtime -delete</code> 处理文件而不杀进程</li>
+<li><strong>长期</strong>：所有 destructive ops 必走 review + canary（先 1 个节点跑）+ 监控（杀进程数 metric，超阈值自动停）；建立 platform op runbook 与同行 review SOP</li>
+<li>权衡：精确匹配可能漏杀；review SOP 拖慢运维节奏；canary 增加复杂度</li>
+</ul>
+<h3 id="v10-q-22-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：<code>rm -rf</code> 在变量为空时变成 <code>rm -rf /</code> 经典脚本灾难</li>
+<li>变体：<code>find -exec rm</code> 与 <code>xargs rm</code> 的并发风险</li>
+<li>易错：<code>pkill</code> 不加 <code>-u &amp;lt;uid&amp;gt;</code> 匹配所有用户的进程</li>
+<li>追问："为什么 K8s 的 preStop hook 不会有这种问题？"→ K8s 通过 PID namespace 隔离</li>
+</ul>
+<h3 id="v10-q-22-s-6">6. 预防机制</h3>
+<ul>
+<li>平台 op SOP：所有"批量"命令必须 (a) 默认 dry-run (b) 限定 uid/scope (c) 经同行 review (d) 先 canary 一个节点</li>
+<li>shellcheck / 静态扫描所有运维脚本进 CI</li>
+<li>audit 监控：每节点每分钟被 kill 的进程数 metric，异常突增报警</li>
+<li>训练任务进程加 sentinel marker（特定环境变量），cleanup 脚本必须排除带此 marker 的</li>
+<li>演练：故障注入演习（chaos monkey）每月跑一次，包含"误发 SIGTERM"场景</li>
+</ul>
+<h3 id="v10-q-22-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：cleanup 脚本 <code>pkill -f 'tmp_'</code> 把训练进程当临时文件杀了。</li>
+<li>关键机制：destructive 命令匹配范围审视不足 + 全节点同时执行 + root 权限 + 无 dry-run。</li>
+<li>修复 / 防御：默认 dry-run + 限定 uid + 同行 review + canary 单节点 + 杀进程数监控。</li>
+<li>面试加分关键词：systemd timer、auditd、sentinel marker、shellcheck CI。</li>
+</ul>
+<h3 id="v10-q-22-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"运维好心做坏事杀整集群"的核心症状？</li>
+<li>[ ] 你能不能解释 <code>pkill -f</code> 匹配规则与误伤路径？</li>
+<li>[ ] 你能不能举一个类似场景（如 <code>rm -rf $VAR</code> 变量为空灾难）？</li>
+<li>[ ] 你能不能说出 dry-run + uid 限定 + canary 三层防御？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="07-training-inference-platform.html#v07-q-84"><span class="vchip">Vol 07</span><span class="qchip">Q84</span><span class="ttl">设计题：训练 + 在线推理 + RL rollout 三类负载的统一 GPU 平台</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-6"><span class="vchip">Vol 10</span><span class="qchip">Q6</span><span class="ttl">NCCL all-reduce hang：256 卡训练突然全卡 idle 复盘</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-21"><span class="vchip">Vol 10</span><span class="qchip">Q21</span><span class="ttl">Spot 抢占雪崩：高优任务突发挤掉 100 个低优任务连锁失败</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-9"><span class="vchip">Vol 10</span><span class="qchip">Q9</span><span class="ttl">慢节点 straggler：1024 卡训练被 1 个 rank 拖慢 2×</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-23"><span class="qchip">Q23</span>SLURM queue 饥饿：长任务永远排不上，运维不察觉</h2>
+<h3 id="v10-q-23-s-1">1. 现象</h3>
+<p>某 SLURM 集群设有 <code>short</code> / <code>long</code> / <code>priority</code> 三个 partition，研究人员反馈提交 64 卡 7 天的训练任务在 <code>long</code> 队列等了 5 天还没起，但小任务一直在跑。排查发现 backfill scheduler 配置不当，长任务永远抢不到时间窗。</p>
+<h3 id="v10-q-23-s-2">2. 根因层级原理</h3>
+<p>SLURM backfill 调度器原理：在不影响最高优先级任务预定开始时间的前提下，把 idle 资源分给低优短任务利用率。问题是 (a) <code>backfill_window</code> 设得短（默认 1440 分钟，即 24h），看不到 7 天后的可用窗口，没法提前为长任务预留；(b) 短任务 walltime 估算不准（用户填 24h 实际跑 1h），调度器以保守估计排队，反而让短任务连续抢节点；(c) 长任务 priority 没有 aging（等待时间不增加优先级），永远被新提交压制；(d) <code>MaxNodes</code> 不限制，单用户大任务卡死 partition。</p>
+<h3 id="v10-q-23-s-3">3. 定位手段与命令</h3>
+<ul>
+<li><code>sprio -j &amp;lt;jobid&amp;gt;</code> 看任务优先级各 component</li>
+<li><code>scontrol show config | grep -i backfill</code> 看 backfill 配置</li>
+<li><code>sshare -A &amp;lt;account&amp;gt;</code> 看 fairshare 状态</li>
+<li><code>sacct --start=$T --format=JobID,Submit,Start,Elapsed,TimeLimit</code> 统计 wait time 分布</li>
+<li>自定义脚本：每 partition 长任务的 wait time p99 trend</li>
+</ul>
+<h3 id="v10-q-23-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：手动 <code>scontrol update job &amp;lt;id&amp;gt; Priority=...</code> 提高被饿死任务优先级</li>
+<li><strong>中期</strong>：调 <code>bf_window</code> 到 7 天 + <code>bf_max_job_test</code> 增加；启用 priority aging（<code>PriorityWeightAge</code>）</li>
+<li><strong>长期</strong>：拆 partition 按 walltime 分级（短/中/长）物理隔离；引入 reservation 给关键长任务预留；fairshare account 限制单用户/项目消耗</li>
+<li>权衡：bf_window 大调度器开销大；partition 拆分降低池化效率；reservation 硬占用资源</li>
+</ul>
+<h3 id="v10-q-23-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：K8s gang scheduling / Volcano / Kueue 也有类似 long-job 饥饿</li>
+<li>变体：preemptible 任务永远被抢回到队尾形成 livelock</li>
+<li>易错：以为 "FIFO 公平"——SLURM 默认是按 priority 不是 FIFO</li>
+<li>追问："backfill 与 priority scheduling 区别？"→ 一个见缝插针不影响主序，一个绝对优先</li>
+</ul>
+<h3 id="v10-q-23-s-6">6. 预防机制</h3>
+<ul>
+<li>监控：每 partition 任务 wait time p99，超阈值（如 long &gt; 24h）告警</li>
+<li>调度配置作为 IaC（Ansible/Terraform 管理 slurm.conf），变更走 review</li>
+<li>用户教育：walltime 不要膨胀填（影响 backfill 窗口估计）</li>
+<li>周报：饥饿任务列表给平台管理员看</li>
+<li>演练：人为提交极长任务验证 backfill 行为</li>
+</ul>
+<h3 id="v10-q-23-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：长任务排了 5 天起不来，backfill window 太短 + 没 priority aging。</li>
+<li>关键机制：backfill 看不到远期窗口 + 短任务 walltime 估算膨胀 + 长任务无优先级老化。</li>
+<li>修复 / 防御：扩 bf_window + 启用 PriorityWeightAge + 按 walltime 拆 partition + fairshare 配额。</li>
+<li>面试加分关键词：sprio、bf_max_job_test、Volcano gang scheduling、reservation。</li>
+</ul>
+<h3 id="v10-q-23-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"小任务在跑长任务永远排不上"的核心症状？</li>
+<li>[ ] 你能不能解释 backfill 调度看不到远期窗口的影响？</li>
+<li>[ ] 你能不能举一个类似场景（如 K8s Kueue 长任务饥饿）？</li>
+<li>[ ] 你能不能说出 bf_window + priority aging + partition 拆分的防御组合？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="07-training-inference-platform.html#v07-q-84"><span class="vchip">Vol 07</span><span class="qchip">Q84</span><span class="ttl">设计题：训练 + 在线推理 + RL rollout 三类负载的统一 GPU 平台</span></a></li>
+    <li><a href="07-training-inference-platform.html#v07-q-22"><span class="vchip">Vol 07</span><span class="qchip">Q22</span><span class="ttl">训练平台的 job scheduler 如何设计？FIFO vs priority vs fair sharing？</span></a></li>
+    <li><a href="07-training-inference-platform.html#v07-q-68"><span class="vchip">Vol 07</span><span class="qchip">Q68</span><span class="ttl">SLURM Queue / partition / QoS 怎么设计？抢占、共享、独占、长短任务分流？</span></a></li>
+    <li><a href="07-training-inference-platform.html#v07-q-81"><span class="vchip">Vol 07</span><span class="qchip">Q81</span><span class="ttl">比较题：SLURM vs Kubernetes (Volcano/Kueue) vs Ray 三套调度的取舍</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-24"><span class="qchip">Q24</span>GPU 资源声明不匹配：作业拿到 4 卡却只能用 2 卡</h2>
+<h3 id="v10-q-24-s-1">1. 现象</h3>
+<p>某用户 SLURM 提交脚本写 <code>--gres=gpu:4</code>，启动后训练 launcher 只检测到 2 张 GPU，训练 hang 在 NCCL 初始化（rank 数与 GPU 数不一致）。<code>nvidia-smi</code> 在节点上显示 4 张卡，但 <code>CUDA_VISIBLE_DEVICES</code> 只暴露 2 张。</p>
+<h3 id="v10-q-24-s-2">2. 根因层级原理</h3>
+<p>GPU 资源声明涉及多层：(a) SLURM gres 配置（<code>gres.conf</code> 描述节点有几张 GPU）；(b) cgroup / device cgroup 限制实际可见设备；(c) <code>CUDA_VISIBLE_DEVICES</code> 由 prolog 设置；(d) 容器场景叠加 NVIDIA Container Runtime 注入。任一层失配就出错。常见原因：节点 <code>gres.conf</code> 标错（说有 8 卡但实际 4 卡正常 + 4 卡 RMA 中），或 cgroup 配置 bug 漏暴露设备，或 prolog 脚本 set <code>CUDA_VISIBLE_DEVICES</code> 的 bash 解析错误。</p>
+<h3 id="v10-q-24-s-3">3. 定位手段与命令</h3>
+<ul>
+<li>节点视角：<code>scontrol show node &amp;lt;n&amp;gt;</code> 看 gres 报告 vs 实际</li>
+<li><code>cat /proc/$PID/status | grep Cpus_allowed</code> + <code>cat /sys/fs/cgroup/devices/.../devices.list</code> 看 cgroup 限制</li>
+<li>任务内 <code>echo $CUDA_VISIBLE_DEVICES</code> + <code>nvidia-smi -L</code></li>
+<li>SLURM prolog log：<code>/var/log/slurm/prolog.log</code> 看 set 过程</li>
+<li><code>dcgmi diag -r 1</code> 看 GPU 健康，是否有卡 fault 被自动隔离</li>
+</ul>
+<h3 id="v10-q-24-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：手动 <code>unset CUDA_VISIBLE_DEVICES</code> 或显式 set 全 0,1,2,3 验证；在另一节点重排</li>
+<li><strong>中期</strong>：修 <code>gres.conf</code> 与实际硬件对齐；fix prolog 解析；统一容器镜像里 NVIDIA runtime 配置</li>
+<li><strong>长期</strong>：节点入集群 burn-in 包含 GPU count check；SLURM gres 自动从 <code>nvidia-smi -L</code> 派生而非手填</li>
+<li>权衡：自动派生需要节点稳定性；burn-in 增加上线时间</li>
+</ul>
+<h3 id="v10-q-24-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：MIG 模式下 SLURM 看到的是 MIG 实例数而非物理卡数</li>
+<li>变体：K8s Device Plugin 注入逻辑与节点真实状态不一致</li>
+<li>易错：以为 <code>nvidia-smi</code> 看到 4 张就是 4 张可用——cgroup 可能限制了可见性</li>
+<li>追问："<code>CUDA_VISIBLE_DEVICES=0,1,2,3</code> 与 cgroup 谁优先？"→ cgroup 是底层硬限，CVD 是用户态过滤</li>
+</ul>
+<h3 id="v10-q-24-s-6">6. 预防机制</h3>
+<ul>
+<li>节点入集群：burn-in 跑 <code>nvidia-smi -L</code> 与 <code>gres.conf</code> diff，不一致禁止 enable</li>
+<li>训练 launcher 启动第一步 sanity check：<code>torch.cuda.device_count()</code> == <code>SLURM_GPUS_ON_NODE</code> 否则 fail-fast</li>
+<li>监控：每节点 <code>gres_reported_gpus</code> vs <code>actual_visible_gpus</code> metric</li>
+<li>prolog 脚本进 CI（shellcheck + 集成测试）</li>
+<li>节点 image 构建包含 NVIDIA runtime 版本固定</li>
+</ul>
+<h3 id="v10-q-24-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：申请 4 卡只拿到 2 卡，SLURM gres / cgroup / CVD / runtime 链路某环漂了。</li>
+<li>关键机制：多层 GPU 暴露机制相互独立，任一层失配即失语义。</li>
+<li>修复 / 防御：launcher sanity check <code>device_count == SLURM_GPUS_ON_NODE</code> + 节点入集群 burn-in。</li>
+<li>面试加分关键词：gres.conf 自派生、prolog log、NVIDIA Container Runtime、MIG 实例数。</li>
+</ul>
+<h3 id="v10-q-24-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"申请 4 卡只拿到 2 卡"的核心症状？</li>
+<li>[ ] 你能不能解释 gres、cgroup、CVD、runtime 四层之间的关系？</li>
+<li>[ ] 你能不能举一个类似场景（如 K8s Device Plugin 与节点状态不一致）？</li>
+<li>[ ] 你能不能说出 launcher fail-fast + burn-in + gres 自派生的防御组合？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-6"><span class="vchip">Vol 10</span><span class="qchip">Q6</span><span class="ttl">NCCL all-reduce hang：256 卡训练突然全卡 idle 复盘</span></a></li>
+    <li><a href="03-cuda-triton-custom-ops.html#v03-q-45"><span class="vchip">Vol 03</span><span class="qchip">Q45</span><span class="ttl">多 GPU 节点的拓扑感知 placement（NVLink / NUMA / NIC affinity）</span></a></li>
+    <li><a href="07-training-inference-platform.html#v07-q-71"><span class="vchip">Vol 07</span><span class="qchip">Q71</span><span class="ttl">SLURM Custom prolog / epilog 脚本怎么写？cgroup、IB resource limits、NVIDIA driver health？</span></a></li>
+    <li><a href="07-training-inference-platform.html#v07-q-84"><span class="vchip">Vol 07</span><span class="qchip">Q84</span><span class="ttl">设计题：训练 + 在线推理 + RL rollout 三类负载的统一 GPU 平台</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-25"><span class="qchip">Q25</span>节点失联检测延迟：30 分钟才发现节点死机训练全程在等</h2>
+<h3 id="v10-q-25-s-1">1. 现象</h3>
+<p>某 256 卡训练任务，某节点凌晨 3 点死机（kernel panic），整任务挂在 NCCL collective 等这个 rank。但调度器健康检查间隔 5 分钟、3 次失败才标 down，意味着 15+ 分钟才 mark down，再加上任务 reschedule 启动 10 分钟，总损失 30+ 分钟。每周这种事故发生 2–3 次。</p>
+<h3 id="v10-q-25-s-2">2. 根因层级原理</h3>
+<p>健康检测延迟来源：(a) 默认 <code>SlurmdTimeout=300s</code>、<code>UnkillableStepTimeout=60s</code> 等过于保守；(b) ICMP ping 在 kernel panic 但网卡 NIC 还活的场景下仍能响应（伪健康）；(c) 节点维度健康只看 daemon 进程在不在，看不到 GPU 已经卡死；(d) 训练任务自身的 NCCL watchdog 默认 30 分钟 timeout，远大于实际可接受范围；(e) 没有跨层联动：调度器、监控、训练任务三方各自判断不汇总。</p>
+<h3 id="v10-q-25-s-3">3. 定位手段与命令</h3>
+<ul>
+<li>SLURM <code>slurmctld.log</code> 看 node down 的判定时刻</li>
+<li>节点最后心跳：<code>scontrol show node &amp;lt;n&amp;gt;</code> 的 <code>BootTime</code> / <code>LastBusyTime</code></li>
+<li>训练 log：<code>TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC</code> 触发的 fingerprint</li>
+<li>监控系统：节点 lost 事件与 hang 开始的时间差</li>
+<li><code>dmesg</code> 抓 kernel panic 时间戳（需要 console log 或 IPMI 抓取）</li>
+</ul>
+<h3 id="v10-q-25-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li><strong>短期</strong>：调小 SLURM timeout（<code>SlurmdTimeout=120</code>）；调小 NCCL watchdog 到 5 分钟</li>
+<li><strong>中期</strong>：多层健康联动——监控发现节点 GPU metric 5 分钟无更新主动 drain；训练任务嵌入 5 秒级心跳到 Prometheus，缺心跳即 raise</li>
+<li><strong>长期</strong>：BMC / IPMI 带外监控（kernel panic 也能看到），自动 reset；redundant 节点（spare）随时顶替</li>
+<li>权衡：timeout 小误报多（短网络抖动也触发）；BMC 集成复杂度高；redundant 节点成本</li>
+</ul>
+<h3 id="v10-q-25-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>变体：节点假死（CPU 卡 100% 但响应 ping）比真死机更难检测</li>
+<li>变体：网络分区（节点活但跨节点不通）调度器与节点都自认为正常</li>
+<li>易错：以为 "ping 通就是活的"——ping 由 NIC 处理不依赖 CPU</li>
+<li>追问："Kubernetes node not ready 怎么检测？"→ kubelet 心跳 + node-problem-detector</li>
+</ul>
+<h3 id="v10-q-25-s-6">6. 预防机制</h3>
+<ul>
+<li>监控立体化：daemon 健康 + GPU metric 心跳 + 训练任务心跳 + BMC 带外，任一层异常都触发 drain</li>
+<li>训练任务嵌入 cheap heartbeat（每 5 秒上报 step counter），平台侧 30 秒无更新即报警</li>
+<li>BMC / IPMI 接入监控系统（OpenBMC、Redfish）</li>
+<li>节点 watchdog 自动 reset 死机节点（kernel softdog）</li>
+<li>月度演练：人为 SysRq trigger panic 验证检测链路 e2e</li>
+</ul>
+<h3 id="v10-q-25-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：节点 kernel panic 30 分钟后才被发现，单次事故吃掉半小时算力。</li>
+<li>关键机制：多层 timeout 叠加（SlurmdTimeout + NCCL watchdog + ping 伪健康）。</li>
+<li>修复 / 防御：5 秒级心跳 + GPU metric 缺失自动 drain + BMC 带外监控 + softdog 自动 reset。</li>
+<li>面试加分关键词：TORCH_NCCL_HEARTBEAT_TIMEOUT、IPMI/Redfish、node-problem-detector、网络分区。</li>
+</ul>
+<h3 id="v10-q-25-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一句话讲清"30 分钟才发现节点死机"的核心症状？</li>
+<li>[ ] 你能不能解释多层 timeout 叠加导致的检测延迟？</li>
+<li>[ ] 你能不能举一个类似场景（如节点假死 ping 通 CPU 卡死）？</li>
+<li>[ ] 你能不能说出 daemon + GPU metric + 训练心跳 + BMC 四层联动的防御立体化？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-6"><span class="vchip">Vol 10</span><span class="qchip">Q6</span><span class="ttl">NCCL all-reduce hang：256 卡训练突然全卡 idle 复盘</span></a></li>
+    <li><a href="05-memory-communication-profiling.html#v05-q-32"><span class="vchip">Vol 05</span><span class="qchip">Q32</span><span class="ttl">通信时间的 breakdown 分析？all-reduce、all-gather 占比？</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-21"><span class="vchip">Vol 10</span><span class="qchip">Q21</span><span class="ttl">Spot 抢占雪崩：高优任务突发挤掉 100 个低优任务连锁失败</span></a></li>
+    <li><a href="04-distributed-training.html#v04-q-48"><span class="vchip">Vol 04</span><span class="qchip">Q48</span><span class="ttl">Async TP（PyTorch 2.5+）的启用条件、性能收益与陷阱？</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-26"><span class="qchip">Q26</span>比较：训练 NaN、通信 hang、推理 OOM 三类典型事故的定位路径与防御策略</h2>
+<h3 id="v10-q-26-s-1">1. 现象</h3>
+<p>三类事故的报警信号差异巨大：</p>
+<ul>
+<li>训练 NaN：loss 突然变 NaN / Inf，grad norm 飙升，监控曲线断崖式或台阶式跳变；rank 之间可能不同步（FSDP 下某 rank 先变 NaN）。</li>
+<li>通信 hang：GPU SM 100% 但功耗低、不出 step、不报错；step counter 静止；rank 之间齐刷刷卡住。</li>
+<li>推理 OOM：p99 延迟飙升 + KV cache usage 100% + preempt rate 高 + 5xx 涌现；进程不挂但服务降级。</li>
+</ul>
+<p>三类的共同特征是"看上去挂了"但根因层完全不同。</p>
+<h3 id="v10-q-26-s-2">2. 根因层级原理</h3>
+<table>
+<thead><tr><th>维度</th><th>训练 NaN</th><th>通信 hang</th><th>推理 OOM</th></tr></thead>
+<tbody>
+<tr><td>主因层</td><td>数值 / 算法 / 数据</td><td>网络 / NCCL / 拓扑</td><td>资源调度 / 内存</td></tr>
+<tr><td>触发尺度</td><td>单 step / 单 layer</td><td>rank / 节点</td><td>服务 / 池</td></tr>
+<tr><td>时间特征</td><td>离散事件</td><td>持续 hang</td><td>高负载持续</td></tr>
+<tr><td>进程态</td><td>可能继续跑出 NaN 传播</td><td>spin-wait 看似在跑</td><td>不挂只是退化</td></tr>
+<tr><td>典型根因</td><td>FP16 溢出、bad sample、学习率过大</td><td>rank 失联、NIC flap、版本漂移</td><td>长 prompt、KV 泄漏、calibration 不对</td></tr>
+</tbody></table>
+<h3 id="v10-q-26-s-3">3. 定位手段与命令对比</h3>
+<ul>
+<li>训练 NaN：<code>anomaly detection</code>、<code>torch.isnan().any()</code> 嵌入 step、按层 weight/grad norm trace、bad batch 回放</li>
+<li>通信 hang：<code>py-spy dump</code>、<code>NCCL_DEBUG=INFO</code>、flight recorder、heartbeat 缺失检测、<code>dcgmi diag -r 3</code></li>
+<li>推理 OOM：<code>vllm:gpu_cache_usage</code>、<code>num_preempted_total</code>、<code>free_block_floor</code> trend、prompt 长度分布</li>
+</ul>
+<p>共性工具：Prometheus 时间序列对齐、log aggregation、<code>/metrics</code> endpoint。差异工具：训练偏框架内 hook，通信偏系统层 trace，推理偏业务 metric。</p>
+<h3 id="v10-q-26-s-4">4. 修复路径与权衡</h3>
+<ul>
+<li>训练 NaN：止血是回滚最近 ckpt + 跳过坏样本 / 降 lr / 切回 fp32；长期是 loss scaling + grad clipping + 数据清洗。</li>
+<li>通信 hang：止血是定位失联 rank 重启节点；长期是 watchdog + heartbeat + image 治理。</li>
+<li>推理 OOM：止血是网关限长 + 限并发 + 扩容；长期是 chunked prefill + 长短分流 + KV 卸载。</li>
+</ul>
+<p>权衡上：训练复盘可"慢"（离线 bisect 即可），通信和推理必须秒级响应；训练 NaN 通常可恢复（回滚 ckpt），通信 hang 损失整段算力，推理 OOM 直接影响用户体验。</p>
+<h3 id="v10-q-26-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>易错：把 "NCCL hang" 和 "training NaN propagated" 混淆——NaN 也可能让 collective 失败，但定位思路不同</li>
+<li>易错：推理 OOM 看 nvidia-smi 没满（KV 是预分配）就放过</li>
+<li>易错：把"all reduce 慢"当 hang，但其实是带宽劣化（busbw 退化 vs 完全卡住）</li>
+<li>追问："这三类事故哪个最容易自动化恢复？"→ 训练 NaN（回滚 ckpt + 跳样本可脚本化）；推理 OOM 次之；通信 hang 最难（要定位单点）</li>
+</ul>
+<h3 id="v10-q-26-s-6">6. 预防机制</h3>
+<p>立体化防御矩阵：</p>
+<ul>
+<li>训练侧：loss watchdog + grad norm 红线 + dirty sample skip + checkpoint cadence</li>
+<li>通信侧：launcher 注入 watchdog 参数 + nccl-tests pre-flight + image baseline + heartbeat</li>
+<li>推理侧：prompt 长度限流 + KV 池容量规划 + autoscaler 业务指标 + chaos test</li>
+<li>公共：跨层报警关联（同一 job 的训练 hang 与节点 ECC 关联看），平台级 SLO 看板</li>
+</ul>
+<h3 id="v10-q-26-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：三类事故根因层不同——训练在数值/数据、通信在网络/拓扑、推理在资源/调度。</li>
+<li>关键机制：训练是离散异常事件、通信是 spin-wait 整齐卡住、推理是持续退化 + 雪崩。</li>
+<li>修复 / 防御：训练靠 anomaly detect + ckpt 回滚，通信靠 watchdog + heartbeat，推理靠限流 + 容量规划。</li>
+<li>面试加分关键词：anomaly detection、flight recorder、admission control、立体化 SLO。</li>
+</ul>
+<h3 id="v10-q-26-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能在白板上画出这三类事故的"现象 → 根因 → 工具 → 防御"矩阵？</li>
+<li>[ ] 你能不能解释为什么 nvidia-smi 在推理 OOM 中常常显示显存"够"？</li>
+<li>[ ] 你能不能举一个跨类事故的例子（如 NCCL hang 实际由 NaN 传播触发）？</li>
+<li>[ ] 你能不能说出三类事故各自最该上的一个监控指标？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-4"><span class="vchip">Vol 10</span><span class="qchip">Q4</span><span class="ttl">推理服务 KV cache OOM：长 prompt 突发流量打爆显存</span></a></li>
+    <li><a href="13-recommendation-inference.html#v13-q-17"><span class="vchip">Vol 13</span><span class="qchip">Q17</span><span class="ttl">推荐 / LLM / 图像生成三大推理范式对照</span></a></li>
+    <li><a href="07-training-inference-platform.html#v07-q-84"><span class="vchip">Vol 07</span><span class="qchip">Q84</span><span class="ttl">设计题：训练 + 在线推理 + RL rollout 三类负载的统一 GPU 平台</span></a></li>
+    <li><a href="11-posttraining-new-inference.html#v11-q-10"><span class="vchip">Vol 11</span><span class="qchip">Q10</span><span class="ttl">Disaggregated prefill/decode 是什么？为什么 Mooncake / DeepSeek 在生产里用它？</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-27"><span class="qchip">Q27</span>场景：周五下午 5 点推理服务 P99 飙升 + region 5xx，30 分钟决策路径</h2>
+<h3 id="v10-q-27-s-1">1. 现象</h3>
+<p>oncall 收到告警：推理服务 P99 时延从 800 ms 飙到 12 s，us-west region 5xx 占比 8%（其它 region 正常），客户投诉开始进来。日程上 30 分钟后是周五全员下班；on-call 当前只有 2 个人在班，PM 在外地，资深架构师在飞机上。</p>
+<h3 id="v10-q-27-s-2">2. 根因层级原理（30 分钟内可考虑的可能性）</h3>
+<p>按"高频 × 容易快速验证"排序：</p>
+<ol>
+<li>单 region 流量异常（被刷 / 突发长 prompt）→ 看 QPS + prompt 长度分布</li>
+<li>单 region 部分节点 GPU 健康问题（ECC、降频、链路）→ 看节点 health metric</li>
+<li>最近一次发布灰度异常（FP8 量化、调度器配置、Image 升级）→ 看发布 timeline</li>
+<li>上游依赖故障（向量库、模型路由、auth 服务）→ 看依赖 SLO</li>
+<li>跨 region 路由策略问题（traffic 错误分流）→ 看路由 weight 与实际流量</li>
+<li>底层基础设施（云厂商网络 / 存储）→ 看 cloud provider status</li>
+</ol>
+<h3 id="v10-q-27-s-3">3. 定位手段与命令（建议时间盒）</h3>
+<ul>
+<li>T+0 到 T+3 min：拉团队 war room（即使 2 人也建一个 channel），同步关键指标 dashboard 链接，明确"决策窗口 30 分钟"</li>
+<li>T+3 到 T+10 min：并行查 5 件事（每人 2.5 件）——</li>
+<ul>
+<li>QPS / 长 prompt 比例 / 错误率分桶</li>
+<li>最近 24h 发布历史 + 灰度比例</li>
+<li>节点健康（DCGM + ibstat）</li>
+<li>上游依赖延迟</li>
+<li>路由策略最近改动</li>
+</ul>
+<li>T+10 到 T+15 min：根据上面拿到的证据收敛到 1–2 个 hypothesis</li>
+<li>T+15 到 T+25 min：执行"最可逆"动作先验证（回滚最近发布 / 切流到健康 region / 限流）</li>
+<li>T+25 到 T+30 min：评估是否解决；若没解决决定升级到 P0 拉资深人</li>
+</ul>
+<h3 id="v10-q-27-s-4">4. 修复路径与权衡</h3>
+<p>按"风险 × 时效"分级动作：</p>
+<ul>
+<li>立即可逆（低风险）：流量切走 us-west（traffic shift 到 us-east），网关限 prompt 长度，扩容副本</li>
+<li>中等风险：回滚最近 release（先停止灰度推进，回到上一稳定版）；这要求发布有 1-click rollback</li>
+<li>高风险：禁用某个功能模块（FP8 推理 → 切回 BF16），需要 PM 确认影响范围</li>
+</ul>
+<p>决策原则：周五下午先止血（即使是粗暴 rollback），周一再 root cause 复盘；明确不在"无监督"状态下推不可逆变更。</p>
+<h3 id="v10-q-27-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>易错：第一反应"加机器扩容"——雪崩中扩容也会被瞬间打满，应先限流再扩</li>
+<li>易错：试图在线 debug 拉栈、看 trace 拖延决策——周五下午先回滚再 root cause</li>
+<li>易错：不通知用户 / 不开 status page——透明度差让客户更不满</li>
+<li>追问："如果回滚后还没好怎么办？"→ 升级到全员 incident，按 incident command system 走</li>
+</ul>
+<h3 id="v10-q-27-s-6">6. 预防机制</h3>
+<ul>
+<li>Runbook：oncall 必读"P0 30 分钟决策树"文档，明确止血优先 &gt; root cause</li>
+<li>一键 rollback：每个发布前自动 capture 稳定版 image + 配置 snapshot</li>
+<li>Region 隔离：流量层支持 1 min 内 traffic shift（如 weighted DNS / global load balancer）</li>
+<li>上下班交接：周五下午高风险变更冻结窗口（"freeze Friday after 3pm"）</li>
+<li>演练：季度 chaos 包括"周五下午雪崩"场景，验证 oncall 反应速度</li>
+</ul>
+<h3 id="v10-q-27-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：周五下午先止血回滚，root cause 周一查；时间盒 30 分钟分三段。</li>
+<li>关键机制：war room → 并行 5 路查 → 收敛 1-2 hypothesis → 可逆动作先做。</li>
+<li>修复 / 防御：traffic shift + 限流 + 一键 rollback + Friday freeze + 30 分钟决策树 runbook。</li>
+<li>面试加分关键词：incident command、blast radius、可逆性优先、status page、war room。</li>
+</ul>
+<h3 id="v10-q-27-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能说出"止血先于 root cause"这一核心原则及其适用边界？</li>
+<li>[ ] 你能不能列出 30 分钟决策窗口里的 3 段时间盒分配？</li>
+<li>[ ] 你能不能举一个类似场景（如除夕夜 / 双十一 / 重大客户演示前夕）？</li>
+<li>[ ] 你能不能说出至少 3 个一键可逆动作（traffic shift / rollback / 限流）？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-4"><span class="vchip">Vol 10</span><span class="qchip">Q4</span><span class="ttl">推理服务 KV cache OOM：长 prompt 突发流量打爆显存</span></a></li>
+    <li><a href="13-recommendation-inference.html#v13-q-19"><span class="vchip">Vol 13</span><span class="qchip">Q19</span><span class="ttl">场景题：从 0 设计一个新闻推荐系统的推理服务</span></a></li>
+    <li><a href="05-memory-communication-profiling.html#v05-q-67"><span class="vchip">Vol 05</span><span class="qchip">Q67</span><span class="ttl">场景题：NCCL all-reduce p99 从 30ms 涨到 200ms，怎么三层定位？</span></a></li>
+    <li><a href="09-strategy-engineering-decisions.html#v09-q-7"><span class="vchip">Vol 09</span><span class="qchip">Q7</span><span class="ttl">AWS / GCP / Azure 跨区域容量分布的战略意义？</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-28"><span class="qchip">Q28</span>估算：万卡训练集群在 5% 年故障率下，端到端有效训练时间占比</h2>
+<h3 id="v10-q-28-s-1">1. 现象</h3>
+<p>某万卡集群（10000 个 GPU，按 8 卡/节点算 1250 个节点）跑一个 30 天训练任务。已知：单节点年故障率 5%，checkpoint 间隔 30 分钟，故障检测 + 调度恢复时间 15 分钟（含恢复 ckpt 时间）。问：端到端"有效训练时间 / 总时长"大约是多少？</p>
+<h3 id="v10-q-28-s-2">2. 根因层级原理 / 估算模型</h3>
+<p>设：</p>
+<ul>
+<li>节点年故障率 p = 5%/year/node = 0.05/8760h ≈ 5.7×10⁻⁶ /node/h</li>
+<li>集群节点数 N = 1250</li>
+<li>集群整体故障率 λ = N × p = 1250 × 5.7×10⁻⁶ ≈ 7.13×10⁻³ /h ≈ 0.171/day</li>
+<li>即"集群层面平均每天约 0.17 次故障"，30 天约 5.1 次</li>
+</ul>
+<p>每次故障损失时间 = 检测恢复时间 + 平均回滚损失</p>
+<ul>
+<li>检测恢复 = 15 min</li>
+<li>平均回滚 = ckpt 间隔的一半 = 15 min（假设故障均匀分布在 ckpt 间隔内）</li>
+<li>单次故障损失 ≈ 30 min</li>
+</ul>
+<p>30 天 = 43200 min；故障总损失 ≈ 5.1 × 30 ≈ 153 min；有效训练比例 ≈ (43200 - 153) / 43200 ≈ 99.6%。</p>
+<p>但这只是一阶估算，实际还要叠加：</p>
+<ul>
+<li>ckpt 保存本身耗时（每 30 min 保存若耗 1 min，是 3.3% 持续 overhead）</li>
+<li>网络抖动 / NCCL hang 误报（按经验每天 0.5 次小故障，每次 5 min ≈ 0.3% 损失）</li>
+<li>慢节点 straggler（持续性 5–10% 的吞吐损失）</li>
+<li>一次大故障（如机房断电）可能占 1–2% 损失</li>
+</ul>
+<p>综合估算后端到端 effective_time / wall_time 落在 75%–85% 区间，是行业经验值。</p>
+<h3 id="v10-q-28-s-3">3. 定位手段与命令（如何在实际系统里测量）</h3>
+<ul>
+<li><code>sacct</code> / <code>slurmctld</code> 看每个 job 的 wall time vs <code>effective_time</code>（除去重启段）</li>
+<li>训练 log 里每 step 时间戳计算 <code>goodput = sum(step_time) / wall_time</code></li>
+<li>节点级 MTBF/MTTR 直接从 incident database 统计</li>
+<li>Checkpoint 保存耗时 trend 做 overhead</li>
+<li>监控看板：<code>training_efficiency_ratio</code> 指标长期 trend</li>
+</ul>
+<h3 id="v10-q-28-s-4">4. 修复路径与权衡（如何提升 effective ratio）</h3>
+<ul>
+<li>缩短 ckpt 间隔 → 减少回滚损失，但增加保存 overhead；最优解通常是 15–60 min（依模型大小）</li>
+<li>异步 ckpt → 隐藏保存 overhead，但引入一致性风险（见 Q15）</li>
+<li>弹性训练 / hot spare → 单 rank 故障不中断整任务，需要框架支持（Bamboo、PyTorch elastic）</li>
+<li>故障预测 → 通过 DCGM trend 预判节点退化提前 drain</li>
+<li>跨集群 federation → 故障 region 切到 backup（成本高）</li>
+</ul>
+<p>工业界目标：千卡级 90%+、万卡级 75%–85%、十万卡级 60%–70%。</p>
+<h3 id="v10-q-28-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>易错：直接用单节点 5% 当集群故障率——故障率随节点数线性放大</li>
+<li>易错：忽略 ckpt 保存本身的 overhead</li>
+<li>易错：忽略 straggler 持续性损失，只算硬故障</li>
+<li>追问："故障率独立性假设合理吗？"→ 不完全合理（同机柜断电、同 image bug 会集体故障），实际更糟</li>
+</ul>
+<h3 id="v10-q-28-s-6">6. 预防机制</h3>
+<ul>
+<li>Effective training ratio 作为 platform team SLO 指标</li>
+<li>每周复盘 top 3 损失源（按时间占比）</li>
+<li>投入产出表：ckpt 间隔缩短 X min vs storage cost / overhead cost</li>
+<li>弹性训练框架 day-1 评估</li>
+<li>故障预测模型上线（ECC trend、PCIe link width trend、温度 trend）</li>
+</ul>
+<h3 id="v10-q-28-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：万卡 30 天训练 effective ratio 现实区间 75%–85%，主要损失来自 ckpt overhead + straggler + 故障恢复。</li>
+<li>关键机制：集群故障率 ≈ N × 单节点故障率，每次故障损失 ≈ 检测 + 回滚（ckpt 间隔一半）。</li>
+<li>修复 / 防御：ckpt cadence 调优 + 异步保存 + 弹性训练 + 故障预测 + DCGM trend 预判。</li>
+<li>面试加分关键词：MTBF/MTTR、goodput、elastic training、Bamboo、hot spare、SLO。</li>
+</ul>
+<h3 id="v10-q-28-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能用一页纸算出"万卡 30 天 effective ratio"的一阶估算？</li>
+<li>[ ] 你能不能解释为什么 ckpt 间隔不是越短越好？</li>
+<li>[ ] 你能不能举一个类似场景（如十万卡推理集群可用率估算）？</li>
+<li>[ ] 你能不能说出 4 类损失来源（硬故障、ckpt overhead、straggler、误报）？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-12"><span class="vchip">Vol 10</span><span class="qchip">Q12</span><span class="ttl">Checkpoint 恢复耗时 1 小时：单 rank 串行加载 + 跨 NUMA 拷贝复盘</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-21"><span class="vchip">Vol 10</span><span class="qchip">Q21</span><span class="ttl">Spot 抢占雪崩：高优任务突发挤掉 100 个低优任务连锁失败</span></a></li>
+    <li><a href="07-training-inference-platform.html#v07-q-83"><span class="vchip">Vol 07</span><span class="qchip">Q83</span><span class="ttl">估算题：5k 卡集群 MTBF=30 天 + 30min ckpt 间隔下的 24h 训练成功率</span></a></li>
+    <li><a href="10-postmortems-and-lessons.html#v10-q-25"><span class="vchip">Vol 10</span><span class="qchip">Q25</span><span class="ttl">节点失联检测延迟：30 分钟才发现节点死机训练全程在等</span></a></li>
+  </ul>
+</aside>
+<h2 id="v10-q-29"><span class="qchip">Q29</span>设计：100 人规模 ML 团队的事故复盘机制</h2>
+<h3 id="v10-q-29-s-1">1. 现象 / 需求</h3>
+<p>100 人 ML 团队（含训练、推理、平台、研究），每月 incident 数预计 20–40 次（含 P0/P1/P2 分级），需要一套机制：</p>
+<ul>
+<li>事件触发后 oncall 知道怎么响应</li>
+<li>处置过程被记录</li>
+<li>事后做 blameless postmortem</li>
+<li>action item 被追踪到关闭</li>
+<li>知识沉淀进可检索的知识库供新人和未来事故参考</li>
+</ul>
+<p>要求：低开销（不能让 oncall 写 5000 字报告每次）、可扩展（团队增长不重构）、有度量（postmortem 完成率 / action item 关闭率可追踪）。</p>
+<h3 id="v10-q-29-s-2">2. 根因层级原理（机制设计的核心思考）</h3>
+<p>一套好的复盘机制要满足：</p>
+<ul>
+<li>触发触发器明确：什么级别的事故必须 postmortem（建议 P0/P1 必须，P2 可选）</li>
+<li>角色清晰：incident commander、scribe、SME（subject matter expert）、postmortem owner</li>
+<li>Blameless 文化保障：不点名个人 / 不挂钩绩效，关注流程缺陷</li>
+<li>模板标准化：现象 / timeline / root cause / 影响范围 / action items / lessons</li>
+<li>追踪闭环：action item 进 Jira / Linear，有 owner 有 due date 有 review cadence</li>
+<li>知识沉淀：搜索友好、tag 分类、相似事件链接</li>
+</ul>
+<h3 id="v10-q-29-s-3">3. 定位手段与命令 / 具体机制流程</h3>
+<p>T0 触发：</p>
+<ul>
+<li>监控系统报警 → PagerDuty → oncall 接手</li>
+<li>严重度评估（P0/P1/P2/P3）由 oncall 初判 + 5 分钟内 incident commander 确认</li>
+</ul>
+<p>T0–T+N（处置中）：</p>
+<ul>
+<li>建 Slack / Teams 专属 channel <code>#incident-yyyy-mm-dd-shortname</code></li>
+<li>Scribe（轮值）实时记录关键决策与时间戳</li>
+<li>业务影响每 15 分钟 update status page</li>
+</ul>
+<p>事后（24h 内）：</p>
+<ul>
+<li>Owner（默认 incident commander 或他指定）创建 postmortem 文档（模板填充）</li>
+<li>24h 内填完 timeline + 初步 root cause</li>
+</ul>
+<p>事后（5 工作日内）：</p>
+<ul>
+<li>跨团队 review 会议（30–60 min），focus 在系统问题 + action item 而非个人</li>
+<li>Action item 必须 SMART（具体 / 可衡量 / 有 owner / 有 deadline）</li>
+</ul>
+<p>事后（持续）：</p>
+<ul>
+<li>Action item 每周 review 进度</li>
+<li>每月汇总进数据库：top 故障类型、top 复发模块、整体 MTTR/MTBF trend</li>
+<li>季度 review：组织级 lessons + 关键模块改造投入</li>
+</ul>
+<h3 id="v10-q-29-s-4">4. 修复路径与权衡（机制本身的 trade-off）</h3>
+<ul>
+<li>Blameless vs 责任追溯：blameless 不代表无人改进——区分"个人疏忽"（培训）vs "系统缺陷"（工具/流程）；高频个人疏忽要私下 1:1</li>
+<li>详尽度 vs 成本：100 人团队每月 30 次 P0/P1 全部深度复盘要消耗 60+ 人天，必须分级模板（深度 vs 轻量）</li>
+<li>自动化 vs 灵活性：模板自动化（如自动抓 timeline、metric 截图）省时间，但限制叙事；保留 narrative section</li>
+<li>共享 vs 隐私：postmortem 是否对外发布？建议内部全开放、外部按需脱敏发安全公告</li>
+<li>强制 vs 自愿：P0/P1 强制 postmortem，P2 鼓励但不强制</li>
+</ul>
+<h3 id="v10-q-29-s-5">5. 同类变体 / 易错点</h3>
+<ul>
+<li>易错：postmortem 只关注 "怎么不再发生"——同样重要的是"如何更快检测 + 更快修复"</li>
+<li>易错：action item 写得太大没人做（"重构调度器"），要切到 1–2 周可完成的小单元</li>
+<li>易错：没有跟进 cadence，action item 一年都不关闭</li>
+<li>易错：knowledge base 没人维护变成废墟，要有 ownership + 季度 audit</li>
+<li>追问："SRE 的 blameless 原则在小团队（10 人）适用吗？"→ 适用但更轻量，重点在文化而非流程</li>
+</ul>
+<h3 id="v10-q-29-s-6">6. 预防机制（让机制本身不会失灵）</h3>
+<ul>
+<li>平台团队设专职 "incident program manager" 负责机制 owner（100 人规模能负担 0.3–0.5 FTE）</li>
+<li>Postmortem 模板版本化（Git 管理），每 6 个月迭代一次</li>
+<li>Metric 看板：postmortem 完成率、平均完成时长、action item 关闭率、复发事件数</li>
+<li>季度组织级 review：top 3 反复发生的事故类型 → 重大投入决策</li>
+<li>新人 onboarding 必读：近 6 个月 top 5 postmortem</li>
+<li>工具集成：incident channel 自动生成 → postmortem doc 模板 → Jira 自动建 action item ticket</li>
+</ul>
+<h3 id="v10-q-29-s-7">7. 30 秒速答</h3>
+<ul>
+<li>一句话核心：从触发 → 处置 → blameless 复盘 → action item 追踪 → 知识沉淀的完整闭环，分级模板减开销。</li>
+<li>关键机制：incident commander / scribe / owner 角色清晰 + 24h 初稿 + 5 工作日 review + SMART action items。</li>
+<li>修复 / 防御：blameless 文化 + 分级强制 + 自动模板 + metric 看板 + 季度组织级 review。</li>
+<li>面试加分关键词：incident command system、blameless postmortem、SMART action item、MTTR/MTBF、knowledge base ownership。</li>
+</ul>
+<h3 id="v10-q-29-s-8">8. 自测 checklist</h3>
+<ul>
+<li>[ ] 你能不能画出这套机制从 T0 到 knowledge base 沉淀的完整时间线？</li>
+<li>[ ] 你能不能解释 "blameless" 不等于 "无责任"？</li>
+<li>[ ] 你能不能举一个 action item 写得不好（太大 / 没 owner）的例子并改写？</li>
+<li>[ ] 你能不能说出 4 个机制本身的健康度量指标？</li>
+</ul>
+<p>---</p>
+<aside class="see-also">
+  <h4>相关题</h4>
+  <ul>
+    <li><a href="09-strategy-engineering-decisions.html#v09-q-34"><span class="vchip">Vol 09</span><span class="qchip">Q34</span><span class="ttl">设计题：LLM 平台成本治理体系</span></a></li>
+    <li><a href="11-posttraining-new-inference.html#v11-q-20"><span class="vchip">Vol 11</span><span class="qchip">Q20</span><span class="ttl">Multi-modal LLM serving 与纯文本 LLM serving 的 infra 差异是什么？</span></a></li>
+    <li><a href="12-aigc-generation-infra.html#v12-q-18"><span class="vchip">Vol 12</span><span class="qchip">Q18</span><span class="ttl">视频生成的 latent video 表示与压缩</span></a></li>
+    <li><a href="11-posttraining-new-inference.html#v11-q-24"><span class="vchip">Vol 11</span><span class="qchip">Q24</span><span class="ttl">Mamba / SSM 状态空间模型与混合架构</span></a></li>
+  </ul>
+</aside>
+</article>
+
+<aside class="toc right"><h3>本题 8 节</h3><ol><li><a data-sec="1" href="#v10-q-1-s-1">现象</a></li>
+<li><a data-sec="2" href="#v10-q-1-s-2">根因层级原理</a></li>
+<li><a data-sec="3" href="#v10-q-1-s-3">定位手段与命令</a></li>
+<li><a data-sec="4" href="#v10-q-1-s-4">修复路径与权衡</a></li>
+<li><a data-sec="5" href="#v10-q-1-s-5">同类变体 / 易错点</a></li>
+<li><a data-sec="6" href="#v10-q-1-s-6">预防机制</a></li>
+<li><a data-sec="7" href="#v10-q-1-s-7">30 秒速答</a></li>
+<li><a data-sec="8" href="#v10-q-1-s-8">自测 checklist</a></li></ol></aside>
+
+</div>
+</main>
+
+<footer class="site-footer"><div class="inner">
+  <span>© 2026 · AI infra 大百科 · 10 卷</span>
+  <span>修订 · 2026-04-23 · 站点构建 · 2026-04-26</span>
+</div></footer>
+</body></html>

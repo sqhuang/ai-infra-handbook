@@ -1,0 +1,5087 @@
+[
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 1,
+    "anchor": "v01-q-1",
+    "title": "PyTorch 的 Autograd 机制是如何实现的？解释 torch.autograd.Function 的工作原理",
+    "lede": "PyTorch 的 Autograd 是一个“按运行时真实执行路径动态构图、在反向阶段沿计算图逆序传播梯度”的自动求导系统。前向执行时，系统会为需要梯度的张量记…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 2,
+    "anchor": "v01-q-2",
+    "title": "torch.nn.Module 的 __call__ 和 forward 有什么区别？为什么要这样设计？",
+    "lede": "forward 是模块作者需要实现的“纯前向计算语义”，描述输入如何变成输出；__call__ 是模块运行入口，负责把一次模块调用接入 PyTorch 的完整执…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 3,
+    "anchor": "v01-q-3",
+    "title": "PyTorch 的分发（Dispatch）机制是什么？ATen、c10、torch.library 分别负责什么？",
+    "lede": "PyTorch 的 Dispatch 机制是其算子运行时的核心路由系统。对同一个逻辑算子名，例如加法、卷积、matmul，框架需要根据输入 Tensor 的设备…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 4,
+    "anchor": "v01-q-4",
+    "title": "如何实现一个自定义的 CUDA 算子并在 PyTorch 中调用？详细步骤是什么？",
+    "lede": "在 PyTorch 中实现自定义 CUDA 算子，通常不是“只写一段 CUDA kernel”这么简单，而是需要完成从算子 schema、C++ 绑定、CPU/…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 5,
+    "anchor": "v01-q-5",
+    "title": "PyTorch 的内存池管理（Caching Allocator）策略是什么？如何分析和优化显存碎片？",
+    "lede": "PyTorch 的 CUDA 内存分配默认采用 Caching Allocator，而不是每次张量申请都直接调用 cudaMalloc / cudaFree。其…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 6,
+    "anchor": "v01-q-6",
+    "title": "torch.jit.trace 和 torch.jit.script 的区别？什么情况下会失败？",
+    "lede": "torch.jit.trace 和 torch.jit.script 都属于 TorchScript 体系，目标是把 Python 模型转成更稳定、可序列化、可…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 7,
+    "anchor": "v01-q-7",
+    "title": "PyTorch 的 DataLoader 中的 num_workers 设置多少合适？遇到过 too many open files 吗？",
+    "lede": "DataLoader 的 num_workers 没有通用最优值，是在“数据准备吞吐”与“额外进程开销/系统资源占用”之间找平衡。它表示有多少个 worker…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 8,
+    "anchor": "v01-q-8",
+    "title": "解释 PyTorch 的 torch.distributed 中的 DDP 和 FSDP 的区别",
+    "lede": "DDP（DistributedDataParallel）和 FSDP（FullyShardedDataParallel）都是 PyTorch 分布式训练的核心并…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 9,
+    "anchor": "v01-q-9",
+    "title": "PyTorch 2.0 的 torch.compile 背后的技术栈是什么？TorchDynamo、AOTAutograd、Inductor 分别做什么？",
+    "lede": "torch.compile 不是单一编译器，而是一条“捕获 Python 程序 -> 提取前后向图 -> 做算子分解与图级优化 -> 生成目标后端代码”的编译流…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 10,
+    "anchor": "v01-q-10",
+    "title": "如何调试 PyTorch 的 CUDA kernel launch 失败？CUDA_LAUNCH_BLOCKING=1 的原理？",
+    "lede": "调试 PyTorch 中的 CUDA kernel launch 失败，第一原则是先把“异步报错”变成“尽量在真实出错点同步报错”。因为绝大多数 CUDA ke…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 11,
+    "anchor": "v01-q-11",
+    "title": "PyTorch 的 hook 机制有哪些？forward_pre_hook 和 backward_hook 的应用场景？",
+    "lede": "PyTorch 的 hook 机制，是在模块调用、张量梯度流动或状态保存恢复等关键时刻插入用户自定义回调，以便观测、修改或扩展框架默认行为。最常见的几类包括：n…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 12,
+    "anchor": "v01-q-12",
+    "title": "如何实现模型的量化感知训练（QAT）？torch.ao.quantization 的 workflow 是什么？",
+    "lede": "QAT（Quantization Aware Training，量化感知训练）的核心思想是：训练阶段仍用浮点参数和浮点反向传播，但在前向中显式模拟量化/反量化误…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 13,
+    "anchor": "v01-q-13",
+    "title": "PyTorch 的 checkpoint 机制（梯度检查点）如何节省显存？计算开销在哪里？",
+    "lede": "梯度检查点（gradient checkpointing / activation checkpointing，即“激活重计算”；这里用“梯度检查点”沿用题干措…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 14,
+    "anchor": "v01-q-14",
+    "title": "解释 torch.cuda.amp 的自动混合精度训练，什么情况下 GradScaler 会跳过参数更新？",
+    "lede": "torch.cuda.amp 的自动混合精度训练，是在保持训练数值稳定的前提下，让一部分算子使用更低精度（通常是 FP16 或 BF16）执行，以降低显存带宽压…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 15,
+    "anchor": "v01-q-15",
+    "title": "如何 profile PyTorch 模型的性能？torch.profiler 和 nvprof 的使用经验？",
+    "lede": "PyTorch 模型性能分析的核心不是“看一个总耗时”，而是把时间拆解到 CPU 侧调度、CUDA kernel、数据加载、显存行为与算子级热点上，明确瓶颈到底…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 16,
+    "anchor": "v01-q-16",
+    "title": "torch.compile 编译失败如何系统定位？TORCH_LOGS、TORCH_TRACE、TorchDynamo explain 等工具怎么配合？",
+    "lede": "torch.compile 编译报错往往不是“某行代码错”，而是 Dynamo 抓图、AOTAutograd 函数化、Inductor 代码生成三个阶段中某一环…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 17,
+    "anchor": "v01-q-17",
+    "title": "graph break 是什么？为什么不好？如何用 fullgraph=True 与用户提示精确诊断？",
+    "lede": "graph break 是 TorchDynamo 在抓图过程中遇到“无法安全建模的 Python 行为”时主动切开图、把当前 FX Graph 交给后端编译、…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 18,
+    "anchor": "v01-q-18",
+    "title": "TorchDynamo guards 失效导致重编译的常见原因与排查方法是什么？",
+    "lede": "重编译（recompile）是 Dynamo 在“同一函数再次被调用、但已编译版本的 guard 不再全部成立”时发起的——guard 是 Dynamo 给每张…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 19,
+    "anchor": "v01-q-19",
+    "title": "AOTAutograd 错误如何溯源到原生 Python 代码？",
+    "lede": "AOTAutograd 抛错时，栈最常落在 torch/_functorch/、torch/_subclasses/fake_tensor.py 或 torch…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 20,
+    "anchor": "v01-q-20",
+    "title": "Inductor 生成的 Triton kernel 怎么读、怎么基准、怎么调？",
+    "lede": "Inductor 在 GPU 上的默认产物是 Triton kernel，每次编译后会落到本地 cache（通常 ~/.cache/torch/inductor…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 21,
+    "anchor": "v01-q-21",
+    "title": "比较题：`torch.compile` vs `torch.jit.script` vs `torch.export` 三者怎么选？",
+    "lede": "torch.compile 是 PT2 默认加速入口，运行时 JIT、保留 Python 控制流、研究/训练/在线推理皆可用；torch.jit.script…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 22,
+    "anchor": "v01-q-22",
+    "title": "场景题：老项目用 `torch.compile` 后 15% 减速，怎么定位？",
+    "lede": "按 graph break、重编译、kernel 选择不当三层定位。先用 torch._dynamo.explain(model)(*args) 看 break…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 23,
+    "anchor": "v01-q-23",
+    "title": "估算题：7B Transformer 在 H100 batch=8 seq=2048 一次前反向的 kernel 启动次数与 Python overhead？",
+    "lede": "粗估每次前向 ~600–1500 个 kernel launch（每层 ~20–40 个：attn QKV proj、attn flash kernel、out…"
+  },
+  {
+    "vol": "01-pytorch-internals",
+    "vol_num": 1,
+    "vol_title": "PyTorch 内部机制卷",
+    "q": 24,
+    "anchor": "v01-q-24",
+    "title": "设计题：研究迭代场景下的自定义算子注册系统",
+    "lede": "系统三层：注册层（按 device key 注册 CPU/CUDA/Meta 实现 + autograd Function）；编译层（暴露 torch.libr…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 1,
+    "anchor": "v02-q-1",
+    "title": "XLA 的 HLO IR 长什么样？如何阅读 XLA 的编译日志？",
+    "lede": "HLO 是 XLA 在前端图和后端代码生成之间的核心中间表示，用来描述张量形状、算子依赖、布局信息以及高层优化后的计算结构。它既不像前端框架的 Python A…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 2,
+    "anchor": "v02-q-2",
+    "title": "TVM 的 Ansor 和 MetaSchedule 的区别？如何搜索最优 schedule？",
+    "lede": "Ansor 和 MetaSchedule 都是在 TVM 里自动搜索高性能 schedule 的方案，但它们所依赖的抽象层和可扩展性不同。Ansor 更偏“基于…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 3,
+    "anchor": "v02-q-3",
+    "title": "MLIR 的设计哲学是什么？dialect、operation、pass 的概念？",
+    "lede": "MLIR 的核心设计哲学是“多层次中间表示”，即不强迫所有编译阶段都挤进单一 IR，而是允许不同抽象层、不同领域语义通过统一基础设施共存与渐进 lowering…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 4,
+    "anchor": "v02-q-4",
+    "title": "TorchInductor 如何将 PyTorch graph 编译成 Triton kernel？",
+    "lede": "TorchInductor 是 PyTorch 2.x 编译栈中的后端代码生成器之一，它接收 TorchDynamo / AOTAutograd 处理后的图表示…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 5,
+    "anchor": "v02-q-5",
+    "title": "ONNX Runtime 的图优化有哪些？constant folding、operator fusion 等",
+    "lede": "ONNX Runtime（ORT）的图优化核心目标是：在不改变 ONNX 语义的前提下，把计算图变得更小、更规整、更适合具体执行提供者（Execution Pr…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 6,
+    "anchor": "v02-q-6",
+    "title": "TensorRT 的 plugin 开发流程？如何支持 dynamic shape？",
+    "lede": "TensorRT plugin 的作用是在原生算子集合之外，为自定义层、特殊融合模式或第三方算子提供可被 TensorRT engine 调用的实现。开发流程的…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 7,
+    "anchor": "v02-q-7",
+    "title": "解释 loop tiling、loop unrolling、vectorization 在编译器优化中的作用",
+    "lede": "loop tiling、loop unrolling、vectorization 是编译器里最常见、也最基础的循环优化手段，但三者解决的问题并不一样。loop…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 8,
+    "anchor": "v02-q-8",
+    "title": "量化编译中的 PTQ 和 QAT 在编译器层面如何处理？",
+    "lede": "PTQ（Post-Training Quantization）和 QAT（Quantization-Aware Training）都以低比特推理为目标，但编译器…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 9,
+    "anchor": "v02-q-9",
+    "title": "稀疏化（sparsity）如何被编译器利用？2:4 structured sparsity 的硬件支持？",
+    "lede": "稀疏化只有在“稀疏模式可被表示、可被分析、且目标硬件/运行时真正支持”时，编译器才能把它转化为性能收益。否则即便权重里有大量零，执行时仍可能按稠密路径计算，几乎…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 10,
+    "anchor": "v02-q-10",
+    "title": "编译器的 pass manager 如何工作？top-down vs bottom-up 遍历？",
+    "lede": "pass manager 的职责是组织、调度并隔离一系列分析与转换 pass，使编译流水线可配置、可复用、可验证。它不直接“发明优化”，但决定了这些优化以什么顺…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 11,
+    "anchor": "v02-q-11",
+    "title": "如何为新的硬件后端添加编译器支持？以自定义 AI 芯片为例",
+    "lede": "为新的硬件后端添加编译器支持，不是“把 IR 翻译成另一种汇编”这么简单，而是要把该硬件的计算模型、存储层次、并行层次、算子约束、数据类型能力和运行时接口系统化…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 12,
+    "anchor": "v02-q-12",
+    "title": "Apache TVM vs MLIR vs TorchDynamo，技术路线差异？",
+    "lede": "TVM、MLIR、TorchDynamo 解决的问题处在不同层级，不能简单横向视为“谁替代谁”。TVM 更像一套端到端深度学习编译器，强调从高层计算图/张量表达…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 13,
+    "anchor": "v02-q-13",
+    "title": "编译时优化和运行时优化的权衡？AOT vs JIT？",
+    "lede": "编译时优化和运行时优化的核心差异，在于“你在做决策时掌握多少真实信息”与“你愿意为这些信息支付多少延迟成本”。AOT（Ahead-of-Time）倾向于在部署前…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 14,
+    "anchor": "v02-q-14",
+    "title": "如何处理编译器的编译时间过长问题？缓存策略？",
+    "lede": "编译时间过长通常不是单点问题，而是“图太碎/太动态、pipeline 太重、重复编译太多、调优预算过高、缓存命中太差”共同造成的。处理思路也不应只靠“少做几个…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 15,
+    "anchor": "v02-q-15",
+    "title": "operator decomposing 和 operator fusion 的边界在哪里？",
+    "lede": "operator decomposing 与 operator fusion 看似方向相反：前者把高层算子拆成更基础的原语，后者把多个原语重新合并成更大的执行单…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 16,
+    "anchor": "v02-q-16",
+    "title": "编译器如何处理 control flow（if/while）？执行轨迹捕获（tracing）vs 符号执行（symbolic execution）？",
+    "lede": "编译器处理 control flow 的核心难点，是在“保留分支/循环语义”与“把程序转换成可优化图表示”之间找到平衡。if/while 这类结构若完全依赖运行…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 17,
+    "anchor": "v02-q-17",
+    "title": "XLA HLO vs MLIR vs TVM 三套 IR 体系，分别适用什么场景？",
+    "lede": "HLO、MLIR、TVM 不是同层 IR：HLO 是 XLA 专用、面向 JAX/PyTorch-XLA 等前端共享的高层张量 IR，强项是 TPU/GPU 端…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 18,
+    "anchor": "v02-q-18",
+    "title": "你的模型用 `torch.compile` 跑得很好，但导出到 TensorRT 后形状不匹配编译失败，怎么排查？",
+    "lede": "torch.compile 与 TensorRT 在“动态形状语义”上有本质差异：前者基于 Dynamo + SymInt + guard，运行时再 speci…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 19,
+    "anchor": "v02-q-19",
+    "title": "一个 70B Llama 在 H100 上用 TensorRT-LLM build engine 大约要多久？build cache 能省下多少？",
+    "lede": "70B 级 Llama 在单卡或多卡 H100 上用 TensorRT-LLM build 一次完整 engine，常见耗时大致在 20 分钟到 1 小时之间，…"
+  },
+  {
+    "vol": "02-compiler-and-ir",
+    "vol_num": 2,
+    "vol_title": "编译器与 IR",
+    "q": 20,
+    "anchor": "v02-q-20",
+    "title": "从 0 设计一个支持多硬件后端（CUDA/ROCm/CPU）的端到端 inference 编译流水线",
+    "lede": "端到端 inference 编译流水线的核心目标是：以 PyTorch 模型为输入，输出每个目标后端（CUDA / ROCm / CPU）的可执行产物以及一份统…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 1,
+    "anchor": "v03-q-1",
+    "title": "用 CUDA 写一个简单的 vector add，如何绑定到 Python？",
+    "lede": "最常见的做法是：先用 CUDA 实现 vector add kernel，再通过 C++ 封装出一个可被 Python 调用的接口，最后借助 PyTorch e…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 2,
+    "anchor": "v03-q-2",
+    "title": "Triton 和 CUDA 的区别？什么时候用 Triton 更合适？",
+    "lede": "CUDA 更底层、控制力更强，适合极致优化与复杂 kernel；Triton 抽象层更高，开发效率更高，尤其适合 dense tensor 场景下的自定义算子、…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 3,
+    "anchor": "v03-q-3",
+    "title": "如何编写一个融合算子（fused op）？以 layernorm + residual + activation 为例",
+    "lede": "融合算子的核心目标是减少中间结果落地与重复读写，把多个本来分开的算子合并到一次 kernel 中完成。以 layernorm + residual + acti…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 4,
+    "anchor": "v03-q-4",
+    "title": "CUTLASS 是什么？什么时候需要用它而不是手写 CUDA？",
+    "lede": "CUTLASS 是 NVIDIA 提供的高性能 CUDA C++/Python DSL 模板库，主要用于构建 GEMM、卷积及其变体等矩阵核心计算。它就是对高性…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 5,
+    "anchor": "v03-q-5",
+    "title": "算子优化中的 memory coalescing、bank conflict、occupancy 分别指什么？",
+    "lede": "这三个概念分别对应 GPU 性能优化中的三个核心维度： - memory coalescing：global memory 访问是否能被合并为高效事务； - b…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 6,
+    "anchor": "v03-q-6",
+    "title": "如何用 Nsight Compute 分析 kernel 性能？关注哪些 metrics？",
+    "lede": "Nsight Compute 的核心用途不是“看一个总分”，而是定位 kernel 受限于哪里：计算、显存带宽、缓存命中、访存模式、同步、指令依赖还是资源占用。…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 7,
+    "anchor": "v03-q-7",
+    "title": "编写 CUDA 时如何平衡 register 使用和 occupancy？",
+    "lede": "register 与 occupancy 的平衡是在“单个线程做得更快”与“SM 上同时驻留更多 warp”之间折中。寄存器多，单线程可能减少重复访存、提高 I…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 8,
+    "anchor": "v03-q-8",
+    "title": "什么是 warp divergence？如何检测和避免？",
+    "lede": "warp divergence 指同一 warp 内线程因控制流分叉而走上不同执行路径，导致硬件必须串行执行各分支，从而降低有效并行度。它最常出现在 if/el…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 9,
+    "anchor": "v03-q-9",
+    "title": "动态 shape 的算子如何优化？vLLM 中的 PagedAttention 是如何解决这个问题的？",
+    "lede": "动态 shape 的难点不只是“尺寸可变”，而是可变尺寸会破坏固定 tile、固定 batch、连续内存布局和编译期特化，从而让 kernel 调度、缓存命中和…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 10,
+    "anchor": "v03-q-10",
+    "title": "算子融合的收益如何评估？什么时候融合反而变慢？",
+    "lede": "评估算子融合收益，不能只看“少了几个 kernel”，而要看是否真正减少了全局访存、launch overhead 和中间结果落地，并且没有引入过高的寄存器压力…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 11,
+    "anchor": "v03-q-11",
+    "title": "FlashAttention 的 IO-aware 优化原理？tiling、recomputation？",
+    "lede": "FlashAttention 的核心不是改写注意力数学形式，而是按 IO-aware 思路重排计算：通过 block tiling 把 Q/K/V 分块放入片上…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 12,
+    "anchor": "v03-q-12",
+    "title": "FlashAttention-2 和 FlashAttention 的改进点？",
+    "lede": "FlashAttention-2 相比 FlashAttention 的核心改进，不是改了 attention 数学定义，而是进一步优化并行划分与硬件利用方式：…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 13,
+    "anchor": "v03-q-13",
+    "title": "xFormers 的 memory_efficient_attention 使用？",
+    "lede": "xFormers 的 memory_efficient_attention 是一个面向 PyTorch 的高性能 attention 接口，目标是在不显式物化完…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 14,
+    "anchor": "v03-q-14",
+    "title": "cuDNN 的 fused attention 如何调用？",
+    "lede": "cuDNN 9 之后，fused attention 的官方调用方式是 cuDNN Frontend（C++ 或 nvidia-cudnn-frontend P…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 15,
+    "anchor": "v03-q-15",
+    "title": "算子融合的边界判断？融合后 register pressure 过高？",
+    "lede": "算子融合的边界判断，是在“减少中间结果 IO / launch 开销”和“避免资源占用失控”之间找平衡。适合融合的通常是强 producer-consumer…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 16,
+    "anchor": "v03-q-16",
+    "title": "内存带宽 bound vs 计算 bound 的判断？arithmetic intensity？",
+    "lede": "判断一个 kernel 是 memory-bound 还是 compute-bound，核心看两件事：一是实际性能更接近带宽上限还是算力上限，二是其 arith…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 17,
+    "anchor": "v03-q-17",
+    "title": "kernel fusion 的手动实现 vs 编译器自动生成？",
+    "lede": "手动 fusion 的优势是可针对具体数据流和硬件做细粒度控制，性能上限更高；编译器自动 fusion 的优势是开发效率高、可维护性好、覆盖面广。通常应先让编译…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 18,
+    "anchor": "v03-q-18",
+    "title": "CUDA Graph 的捕获和重放？torch.cuda.make_graphed_callables？",
+    "lede": "CUDA Graph 的目的，是把一段相对固定的 GPU 工作流捕获成可复用执行图，之后直接重放，从而显著降低频繁 kernel launch、CPU 调度和…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 19,
+    "anchor": "v03-q-19",
+    "title": "动态 shape 的优化困境？torch.compile 的 dynamic=True？",
+    "lede": "动态 shape 的优化困境在于：越想保留 shape 灵活性，越难做激进的编译期特化；越想做极致特化，又越容易触发频繁重编译、cache 膨胀和性能不稳定。P…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 20,
+    "anchor": "v03-q-20",
+    "title": "torch.backends.cudnn.benchmark 的作用和副作用？",
+    "lede": "torch.backends.cudnn.benchmark = True 的作用，是让 cuDNN 在遇到卷积等算子时对多个候选算法做基准测试，选择在当前输入…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 21,
+    "anchor": "v03-q-21",
+    "title": "写一个线程安全的 memory pool，支持 allocate 和 free",
+    "lede": "线程安全 memory pool 的核心不是简单包一层 malloc/free，而是通过预分配、大块切分、空闲链表管理与并发控制，把频繁的小对象分配变成低开销的…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 22,
+    "anchor": "v03-q-22",
+    "title": "CUDA 的 __shared__ memory 使用注意事项？bank conflict？",
+    "lede": "__shared__ memory 的主要价值是提供比 global memory 更低延迟、更高带宽的片上暂存区，但它并不是“越用越好”。使用时要同时关注容量…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 23,
+    "anchor": "v03-q-23",
+    "title": "实现一个 ring buffer 用于 CPU-GPU 异步数据传输",
+    "lede": "用于 CPU-GPU 异步数据传输的 ring buffer，是一个分阶段流水线缓冲区：CPU 负责填充生产槽位，GPU 通过异步 cudaMemcpyAsyn…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 24,
+    "anchor": "v03-q-24",
+    "title": "CUDA stream 和 event 的同步机制？cudaStreamSynchronize？",
+    "lede": "CUDA stream 用于定义一条有序的异步执行队列，stream 内操作默认按提交顺序执行，不同 stream 之间默认可并发；event 则是跨操作、跨…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 25,
+    "anchor": "v03-q-25",
+    "title": "thrust 库的使用经验？transform_reduce？",
+    "lede": "Thrust 是 CUDA 生态里偏 STL 风格的并行算法库，目前与 CUB、libcu++ 一起纳入 NVIDIA 的 CCCL（CUDA Core Com…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 26,
+    "anchor": "v03-q-26",
+    "title": "CUTLASS 的 gemm 调用示例？Epilogue 定制？",
+    "lede": "CUTLASS 的典型 GEMM 调用方式，是在宿主侧实例化一个 cutlass::gemm::device::Gemm 或 GemmUniversal 类型，…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 27,
+    "anchor": "v03-q-27",
+    "title": "NCCL 的 all-reduce 实现？ring 算法代码走读？",
+    "lede": "NCCL 的 all-reduce 核心思路通常可概括为“先 reduce-scatter，再 all-gather”，而 ring 算法是其中最经典、最稳定的…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 28,
+    "anchor": "v03-q-28",
+    "title": "zero-copy memory 的使用场景？cudaHostAlloc？",
+    "lede": "zero-copy memory 的核心价值，是让 GPU 直接访问一段页锁定的 host memory，而不是先显式拷到 device memory。它通常通…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 29,
+    "anchor": "v03-q-29",
+    "title": "多GPU的 peer-to-peer 访问？cudaDeviceEnablePeerAccess？",
+    "lede": "多 GPU 的 peer-to-peer（P2P）访问，指一个 GPU 直接访问另一块 GPU 的显存，而不必绕回主机内存。典型做法是先用 cudaDevice…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 30,
+    "anchor": "v03-q-30",
+    "title": "CUDA Graph 的捕获条件？哪些操作不能捕获？",
+    "lede": "CUDA Graph 捕获的前提，是一段 GPU 工作流能被表示成相对稳定、可重放的流式 DAG：提交顺序、依赖关系、内存地址和调用形态在每次重放时基本一致。能…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 31,
+    "anchor": "v03-q-31",
+    "title": "template metaprogramming 在 CUDA 优化中的应用？",
+    "lede": "template metaprogramming 在 CUDA 优化中的核心价值，是把原本运行时决定的参数和分支前移到编译期：如数据类型、tile 大小、向量宽…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 32,
+    "anchor": "v03-q-32",
+    "title": "RAII 模式管理 CUDA 资源？unique_ptr with custom deleter？",
+    "lede": "RAII 管理 CUDA 资源的核心思想，是把“申请”和“释放”绑定到对象生命周期上，让 cudaMalloc/cudaFree、cudaStreamCreat…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 33,
+    "anchor": "v03-q-33",
+    "title": "CUDA error 处理的最佳实践？CUDA_CHECK 宏？",
+    "lede": "CUDA error 处理的最佳实践，不是简单地“每行后面都同步检查”，而是区分同步 API 错误与异步执行错误，并建立统一的检查宏或辅助函数。通常应对 CUD…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 34,
+    "anchor": "v03-q-34",
+    "title": "warp shuffle 指令的使用？__shfl_sync？",
+    "lede": "warp shuffle 指令允许同一 warp 内线程直接通过寄存器交换数据，而不必借助 shared memory 和 __syncthreads()。__…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 35,
+    "anchor": "v03-q-35",
+    "title": "cooperative groups 的高级用法？grid_group？",
+    "lede": "cooperative groups 提供了比传统 threadIdx/blockIdx/__syncthreads() 更灵活的线程协作抽象，可显式表示 th…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 36,
+    "anchor": "v03-q-36",
+    "title": "GPU 内部拓扑：SM / L2 / HBM 层级与典型带宽量级（A100 / H100 / B100 对照）",
+    "lede": "现代数据中心 GPU 的\"内部拓扑\"由三层关键资源构成：每 SM 自有的寄存器和 SMEM/L1、跨 SM 共享的片上 L2、以及连到外部 HBM 的多通道内存…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 37,
+    "anchor": "v03-q-37",
+    "title": "NVLink / NVSwitch 变体（NVL8 vs NVL72）的拓扑差异与对集合通信的影响",
+    "lede": "NVLink + NVSwitch 决定了\"同一 NVLink domain 内 GPU 间能否走全互联高带宽路径\"。HGX H100 / H200 节点的 8…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 38,
+    "anchor": "v03-q-38",
+    "title": "PCIe Gen5 vs NVLink 4 / 5 实测带宽差异与 P2P 启停判定",
+    "lede": "PCIe 与 NVLink 同时存在于一台主机时，GPU↔GPU 数据路径会优先走 NVLink；缺 NVLink 或被禁用 P2P 时退回到 PCIe（或更糟…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 39,
+    "anchor": "v03-q-39",
+    "title": "跨 NUMA 节点的 GPU-CPU 内存关联与 numactl / numastat 调优",
+    "lede": "HGX/DGX 节点的 8 张 GPU 通常被双 socket CPU 平分，每 4 张 GPU 挂在一个 NUMA node 下；DataLoader / p…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 40,
+    "anchor": "v03-q-40",
+    "title": "Hopper TMA 异步加载机制与典型加速场景",
+    "lede": "TMA（Tensor Memory Accelerator）是 Hopper（sm_90）引入的硬件单元，专门负责 global memory ↔ shared…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 41,
+    "anchor": "v03-q-41",
+    "title": "Blackwell 架构关键变化（FP4、第二代 Transformer Engine、SM / L2 容量）",
+    "lede": "Blackwell（sm_100, B100/B200/GB200）相对 Hopper 的核心变化是四件事：① 双 die 通过 NV-HBI 高带宽片间互联拼…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 42,
+    "anchor": "v03-q-42",
+    "title": "NVENC / NVDEC 硬件单元在 ML 流水线中的实用价值",
+    "lede": "NVENC / NVDEC 是 GPU die 上独立于 SM 的视频编解码硬件单元，原本面向直播 / 转码 / 媒体场景。在 ML 流水线里，它们的价值主要在…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 43,
+    "anchor": "v03-q-43",
+    "title": "GPU clocks / power 管理对训练吞吐的影响与 nvidia-smi -lgc 实测",
+    "lede": "GPU 时钟（SM clock 与 memory clock）受热预算、功耗预算、DVFS 三重约束，长时间高负载下经常会从 boost clock 滑到 ba…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 44,
+    "anchor": "v03-q-44",
+    "title": "GPU ECC 错误（多比特 / 单比特）对训练正确性与吞吐的影响及处理流程",
+    "lede": "数据中心 GPU 的 HBM、L2、寄存器、SMEM 都带 ECC（错误纠正码）。单比特错误（SBE / Correctable）由硬件透明纠正，仅记录计数，不…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 45,
+    "anchor": "v03-q-45",
+    "title": "多 GPU 节点的拓扑感知 placement（NVLink / NUMA / NIC affinity）",
+    "lede": "\"拓扑感知 placement\" 指把进程 / GPU / NUMA / NIC 这四件资源按物理亲和性配对，让 NCCL / DataLoader / RDM…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 46,
+    "anchor": "v03-q-46",
+    "title": "比较题：CUDA C++ vs Triton vs CUTLASS 三种 kernel 实现路径",
+    "lede": "CUDA C++ 控制力最强、Triton 开发效率最高、CUTLASS 是 GEMM 类高性能模板库的最强基础设施。新写自定义 kernel 默认用 Trit…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 47,
+    "anchor": "v03-q-47",
+    "title": "场景题：自定义 attention kernel microbench 提升 5%，但 vLLM 端到端反而变慢",
+    "lede": "三层定位：1) Kernel 本身在生产 batch / shape 下是否仍快；2) 集成路径是否多了 Python 边界 / 内存拷贝 / launch 开…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 48,
+    "anchor": "v03-q-48",
+    "title": "估算题：H100 上 GEMM (M=N=K=8192) FP16 的理论 SOL 与实际 cuBLAS 差距",
+    "lede": "H100 FP16 Tensor Core 峰值 ~990 TFLOPs。GEMM FLOPs = 2 × M × N × K = 1.1 TFLOP。理论 S…"
+  },
+  {
+    "vol": "03-cuda-triton-custom-ops",
+    "vol_num": 3,
+    "vol_title": "第三卷：CUDA、Triton 与自定义算子",
+    "q": 49,
+    "anchor": "v03-q-49",
+    "title": "设计题：生产推理引擎的自定义算子注册 + dispatch 框架（FP8/FP4 + tree mask + PagedAttention）",
+    "lede": "三层架构：1) 算子 schema 层（每个算子定义 input/output shape & dtype）；2) kernel 注册层（per-(arch,…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 1,
+    "anchor": "v04-q-1",
+    "title": "DDP 的梯度分桶（bucketing）机制是什么？bucket size 如何调优？",
+    "lede": "DDP 的 gradient bucketing 就是将多个参数的梯度按 bucket 聚合后统一触发 AllReduce，从而减少通信启动次数，并尽量把通信与…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 2,
+    "anchor": "v04-q-2",
+    "title": "DDP 的 find_unused_parameters 参数什么时候需要设置？性能影响？",
+    "lede": "当模型某些参数在当前前向图中未参与 loss 计算、因此不会产生梯度时，才需要将 find_unused_parameters=True。它能避免 DDP 因等…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 3,
+    "anchor": "v04-q-3",
+    "title": "FSDP 的分片（sharding）策略有哪些？FULL_SHARD vs SHARD_GRAD_OP？",
+    "lede": "FSDP1 的 sharding strategy 枚举包括 FULL_SHARD、SHARD_GRAD_OP、HYBRID_SHARD、_HYBRID_SHA…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 4,
+    "anchor": "v04-q-4",
+    "title": "FSDP 的 auto_wrap_policy 如何配置？size_based vs module_based？",
+    "lede": "FSDP1 的 auto_wrap_policy 用来决定哪些子模块应作为独立 FSDP 单元被包裹，常用有 size_based_auto_wrap_poli…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 5,
+    "anchor": "v04-q-5",
+    "title": "DeepSpeed 的 ZeRO-1/2/3 分别卸载（offload）了什么？显存节省和通信开销的 trade-off？",
+    "lede": "ZeRO 的核心思想不是只做“offload 到 CPU/NVMe”，而是先把模型训练状态在数据并行组内做分片，再视配置决定是否进一步 offload。ZeRO…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 6,
+    "anchor": "v04-q-6",
+    "title": "混合精度训练中的 loss scaling 在分布式场景下如何处理？",
+    "lede": "分布式混合精度训练里，loss scaling 的核心目标没有变化，仍是避免 FP16 梯度下溢；变化在于 overflow 检测、梯度同步和 optimize…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 7,
+    "anchor": "v04-q-7",
+    "title": "梯度累积（gradient accumulation）在 DDP 中的正确实现方式？",
+    "lede": "DDP 中做梯度累积的关键不是“多次 backward”，而是“只在需要更新参数的那个 micro-step 上触发梯度同步”。标准做法是在前 accum_st…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 8,
+    "anchor": "v04-q-8",
+    "title": "分布式 sampler 如何保证每个 epoch 的数据不重复？",
+    "lede": "分布式训练里的 sampler 不能只做“把数据切成 N 份”，还必须保证所有 rank 在同一个 epoch 上共享同一套打乱结果，并且各自只取其中互不重叠的…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 9,
+    "anchor": "v04-q-9",
+    "title": "DDP 的 SyncBatchNorm 原理？什么时候必须用？",
+    "lede": "SyncBatchNorm 的本质是把每张卡局部 batch 的均值、方差统计扩展成跨所有 rank 的全局统计，再用这组全局统计完成 BN 归一化。它适用于单…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 10,
+    "anchor": "v04-q-10",
+    "title": "如何排查分布式训练中的 hang 问题？NCCL_DEBUG=INFO 的输出如何解读？",
+    "lede": "排查分布式训练 hang 的核心不是盲目重启，而是先判断“卡在计算、卡在通信、还是卡在进程同步语义不一致”。最常见根因包括：某些 rank 没有进入同一 col…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 11,
+    "anchor": "v04-q-11",
+    "title": "DDP 的 torchrun 和 mp.spawn 启动方式的区别？",
+    "lede": "torchrun 是 PyTorch 官方推荐的分布式 launcher，负责启动多进程、注入 RANK / WORLD_SIZE / LOCAL_RANK 等…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 12,
+    "anchor": "v04-q-12",
+    "title": "多机多卡训练时，如何设置 NCCL_SOCKET_IFNAME 和 NCCL_IB_DISABLE？",
+    "lede": "NCCL_SOCKET_IFNAME 用来告诉 NCCL 选择哪张网络接口做 socket bootstrap 与 TCP 通信；NCCL_IB_DISABLE…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 13,
+    "anchor": "v04-q-13",
+    "title": "梯度压缩（gradient compression）的方法有哪些？fp16 vs bf16 vs 1bit Adam？",
+    "lede": "梯度压缩常见方法包括低精度通信、量化、稀疏化、误差反馈和延迟同步等。fp16 / bf16 属于风险最低、最常见的“轻量压缩”，可把通信体积相对 fp32 直接…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 14,
+    "anchor": "v04-q-14",
+    "title": "异步训练（如 Hogwild!）在工业界为什么很少用？",
+    "lede": "异步训练之所以在工业界较少成为主流方案，核心原因是它用更弱的一致性换取更少的同步等待，但现代深度学习更在乎稳定收敛、可复现性和系统可控性。对于大多数 dense…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 15,
+    "anchor": "v04-q-15",
+    "title": "如何实现自定义的分布式优化器？继承 torch.optim.Optimizer 的注意事项？",
+    "lede": "自定义分布式优化器通常不只是“继承 torch.optim.Optimizer 并重写 step()”，而是要同时设计参数分片、梯度通信、优化器状态布局和 ch…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 16,
+    "anchor": "v04-q-16",
+    "title": "Tensor Parallelism（TP）的 fused attention 实现细节？",
+    "lede": "TP 下的 fused attention 通常不是把整个 attention 在所有卡上做一次大通信，而是先按 head 或 hidden shard 切分，…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 17,
+    "anchor": "v04-q-17",
+    "title": "Megatron-LM 的 column parallel 和 row parallel 的矩阵划分策略？",
+    "lede": "Megatron-LM 的张量并行把线性层 Y = XW + b 拆成两类经典策略：column parallel 按 W 的输出维切分，row paralle…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 18,
+    "anchor": "v04-q-18",
+    "title": "Pipeline Parallelism（PP）的 bubble 问题如何量化？GPipe vs PipeDream？",
+    "lede": "PP 的 bubble 本质是流水线填充和排空阶段的空转时间。量化时通常把一次 mini-batch 拆成 m 个 micro-batch、流水线深度记为 p，…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 19,
+    "anchor": "v04-q-19",
+    "title": "interleaved pipeline（如 Megatron 的 1F1B）如何减少 bubble？",
+    "lede": "interleaved pipeline 的核心不是改变 PP 基本原理，而是把每个物理 stage 再切成多个更小的 virtual stage，并用更细粒度…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 20,
+    "anchor": "v04-q-20",
+    "title": "激活重计算（activation checkpointing）在 PP 中的特殊处理？",
+    "lede": "激活重计算在 PP 中不能只按“单卡重算一层”来理解，因为一个 micro-batch 的 forward 和 backward 被时间上拉开，中间还夹着多个其…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 21,
+    "anchor": "v04-q-21",
+    "title": "如何平衡 TP、PP、DP 的维度划分？以 175B 模型为例",
+    "lede": "平衡 TP、PP、DP 的原则不是平均分配，而是先用 TP/PP 解决“单卡放不下”和单层算子过大问题，再把剩余卡数尽量留给 DP 提升吞吐。以 175B GP…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 22,
+    "anchor": "v04-q-22",
+    "title": "torch.distributed.pipeline.sync.Pipe 的使用限制？",
+    "lede": "torch.distributed.pipeline.sync.Pipe 更适合教学或规则较强的顺序模型，不适合复杂生产级大模型训练。它的核心限制是：模型必须基…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 23,
+    "anchor": "v04-q-23",
+    "title": "模型并行中的 all-gather 和 reduce-scatter 通信模式？",
+    "lede": "在模型并行里，all-gather 和 reduce-scatter 往往是一对互补操作：all-gather 用于把各 rank 的分片张量重新物化为完整视图…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 24,
+    "anchor": "v04-q-24",
+    "title": "流水线并行中的 micro-batch 大小如何影响吞吐？",
+    "lede": "PP 中 micro-batch 大小影响吞吐的方式不是单调的：micro-batch 太小，会让每次前后向算子太碎、P2P 次数增多、kernel 效率下降；…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 25,
+    "anchor": "v04-q-25",
+    "title": "如何处理 PP 中的负载不均衡？recompute 和 no-recompute 层的分配？",
+    "lede": "PP 负载均衡不能只按“每个 stage 分同样层数”处理，而应按每层的有效时间成本切分，尤其要把 recompute 层在 backward 中额外引入的一次…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 26,
+    "anchor": "v04-q-26",
+    "title": "3D 并行（3D parallelism）的通信复杂度分析？",
+    "lede": "3D 并行通常指 DP、TP、PP 的组合。它的通信复杂度不能只写成一个总公式，而要按三个维度分别分析：DP 主要承担梯度或优化器状态同步，TP 主要承担层内张…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 27,
+    "anchor": "v04-q-27",
+    "title": "序列并行（Sequence Parallelism）在长文本训练中的应用？",
+    "lede": "Sequence Parallelism（SP）的核心思想是把原本在 TP 组内按 hidden 维切分的部分计算，改为按 sequence 维分摊到不同 ra…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 28,
+    "anchor": "v04-q-28",
+    "title": "Expert Parallelism 在 MoE 模型中的 all-to-all 通信优化？",
+    "lede": "MoE 的 Expert Parallelism 中，all-to-all 往往是系统瓶颈，因为 token 需要按路由结果跨 rank 发送到对应 exper…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 29,
+    "anchor": "v04-q-29",
+    "title": "零气泡流水线（Zero Bubble）的最新进展？",
+    "lede": "零气泡流水线的主线进展，是从传统 1F1B 只关注 stage 间排队，发展到进一步拆分 backward 内部依赖，把对关键路径更敏感的梯度计算优先执行，并把…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 30,
+    "anchor": "v04-q-30",
+    "title": "如何 profile 分布式训练的通信开销？torch.profiler 的 distributed view？",
+    "lede": "分布式训练的通信 profile 不能只看单卡 kernel 时间，必须把 collective、P2P、等待空洞和各 rank 之间的时间对齐一起看。torc…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 31,
+    "anchor": "v04-q-31",
+    "title": "Megatron-LM 的代码结构？megatron/core 的新设计？",
+    "lede": "Megatron-LM 早期代码更多围绕训练脚本、模型定义和并行工具展开，而 megatron/core 的新设计则把并行原语、模型组件、优化器与分布式状态管理…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 32,
+    "anchor": "v04-q-32",
+    "title": "DeepSpeed 的 ZeRO-Infinity 和 ZeRO-Offload 的代码入口？",
+    "lede": "从实现视角看，DeepSpeed 的 ZeRO-Offload 和 ZeRO-Infinity 都建立在 ZeRO Stage 2/3 的参数、梯度和 opti…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 33,
+    "anchor": "v04-q-33",
+    "title": "Colossal-AI 的 Gemini 和 PatrickStar 的异同？",
+    "lede": "Gemini 和 PatrickStar 都是在“大模型参数分块管理 + 异构内存调度”思路下解决显存不足问题的系统，但二者定位与实现风格不同。PatrickS…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 34,
+    "anchor": "v04-q-34",
+    "title": "FairScale 的 FullyShardedDataParallel（FSDP）实现细节？",
+    "lede": "FairScale 的 FSDP 可以视为 PyTorch 原生 FSDP 的重要前身之一，其核心思想是把参数展平并分片存储，在需要计算时短暂 all-gath…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 35,
+    "anchor": "v04-q-35",
+    "title": "Hugging Face 的 Accelerate 如何简化分布式训练？",
+    "lede": "Accelerate 的核心价值不是发明新的并行算法，而是把设备放置、进程启动、DDP/FSDP/DeepSpeed/混合精度等训练样板代码统一封装起来，让用户…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 36,
+    "anchor": "v04-q-36",
+    "title": "torch.distributed.fsdp 的 limit_all_gathers 参数作用？",
+    "lede": "limit_all_gathers 的核心作用是限制 FSDP 前向阶段过早、过多地发起参数 all-gather，避免多个模块的 full parameter…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 37,
+    "anchor": "v04-q-37",
+    "title": "大模型训练的 checkpoint 格式？sharded checkpoint 的合并？",
+    "lede": "大模型训练的 checkpoint 不只是模型权重，还应包含 optimizer state、lr scheduler、AMP scaler、随机数状态、全局步…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 38,
+    "anchor": "v04-q-38",
+    "title": "训练恢复的 consistency 问题？如何确保 resume 后的 loss 一致？",
+    "lede": "resume 后想让 loss 与中断前严格一致，必须恢复的不只是模型权重，而是“整个训练状态机”：optimizer、scheduler、AMP scaler…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 39,
+    "anchor": "v04-q-39",
+    "title": "大模型训练的 data pipeline 优化？WebDataset、tfrecord？",
+    "lede": "大模型训练的数据瓶颈常不在模型算子，而在“小文件过多、远端存储吞吐不足、解码开销重、shuffle 代价高、CPU 预处理跟不上”。优化 data pipeli…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 40,
+    "anchor": "v04-q-40",
+    "title": "多模态大模型的训练基础设施挑战？图文数据的加载？",
+    "lede": "多模态大模型训练的基础设施难点，往往不只是“模型更大”，而是“数据形态更复杂”：文本是变长 token，图像是高解码成本、变分辨率、强预处理依赖的数据，二者还要…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 41,
+    "anchor": "v04-q-41",
+    "title": "RLHF 训练的 infra 设计？PPO 的分布式实现？",
+    "lede": "RLHF 训练基础设施的核心，不是单纯把 PPO 跑起来，而是把“采样、打分、训练、参数同步、样本缓存”做成稳定流水线。工业实现通常会拆成 actor、refe…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 42,
+    "anchor": "v04-q-42",
+    "title": "MoE 模型的 all-to-all 通信优化？Tutel、FasterMoE？",
+    "lede": "MoE 的核心瓶颈往往不是 expert MLP 本身，而是 token dispatch 与 combine 阶段的 all-to-all。优化目标是减少无效…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 43,
+    "anchor": "v04-q-43",
+    "title": "长上下文训练（100K+ tokens）的显存优化？Ring Attention？",
+    "lede": "100K+ tokens 训练的核心矛盾，是 attention 的激活、KV、中间 buffer 与通信都会随序列长度急剧膨胀。显存优化通常不能只靠单一技巧，…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 44,
+    "anchor": "v04-q-44",
+    "title": "训练任务的 fault tolerance？elastic training 的实现？",
+    "lede": "大模型训练的 fault tolerance 重点，不只是“定期存 checkpoint”，而是要保证节点故障、作业重启、成员变更后，训练能以可接受的损失继续推…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 45,
+    "anchor": "v04-q-45",
+    "title": "大模型训练的 experiment tracking？Weights & Biases、MLflow？",
+    "lede": "大模型训练的 experiment tracking 不是简单记几条 loss 曲线，而是要把“代码版本、配置、数据版本、环境、指标、checkpoint、告警…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 46,
+    "anchor": "v04-q-46",
+    "title": "NCCL_ALGO / NCCL_NCHANNELS / NCCL_BUFFSIZE 怎么调？各算法适用场景？",
+    "lede": "NCCL_ALGO、NCCL_NCHANNELS、NCCL_BUFFSIZE 是 NCCL 三个最常被工程师摸到的旋钮：算法决定 collective 在拓扑上…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 47,
+    "anchor": "v04-q-47",
+    "title": "IB SHARP（in-network reduction）实战怎么用？命中条件是什么？",
+    "lede": "IB SHARP（Scalable Hierarchical Aggregation and Reduction Protocol）是 NVIDIA Quant…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 48,
+    "anchor": "v04-q-48",
+    "title": "Async TP（PyTorch 2.5+）的启用条件、性能收益与陷阱？",
+    "lede": "Async Tensor Parallel（也叫 SymmetricMemory Async TP）是 PyTorch 2.5+ 引入、由 TorchTitan…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 49,
+    "anchor": "v04-q-49",
+    "title": "DDP / FSDP1 / FSDP2 怎么写公平的吞吐 benchmark？",
+    "lede": "公平 benchmark 的核心是「同模型、同 global batch、同精度、同 NCCL 版本、warmup 后稳态测量、并隔离掉 dataloader/…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 50,
+    "anchor": "v04-q-50",
+    "title": "Pipeline parallel 怎么调试？bubble、激活下沉、micro-batch 切分？",
+    "lede": "PP 调试的三大常见问题是：bubble（流水线空闲期）超出预期、激活在 stage 间「下沉」（前面 stage 的激活越积越多直到 OOM）、micro-b…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 51,
+    "anchor": "v04-q-51",
+    "title": "ZeRO-3 / FSDP 跨节点扩展瓶颈怎么定位？参数 all-gather 还是优化器状态？",
+    "lede": "ZeRO-3（≈ FSDP FULL_SHARD）在跨节点扩展时常见两类瓶颈：前向/反向的参数 all-gather 和 反向的梯度 reduce-scatte…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 52,
+    "anchor": "v04-q-52",
+    "title": "ZeRO-Infinity（NVMe / CPU offload）实战调优要点？",
+    "lede": "ZeRO-Infinity 在 ZeRO-3 之上把优化器状态、梯度乃至参数都可选地卸载到 CPU DRAM 或 NVMe，让单节点也能训练 100B+ 模型；…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 53,
+    "anchor": "v04-q-53",
+    "title": "Megatron-LM 启动参数全景：TP / PP / SP / CP / EP / MoE 怎么配？",
+    "lede": "Megatron-LM 的启动参数本质是「沿哪些正交维度切模型」的声明：--tensor-model-parallel-size (TP)、--pipeline…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 54,
+    "anchor": "v04-q-54",
+    "title": "all-reduce vs reduce-scatter + all-gather：实测对比与何时选哪个？",
+    "lede": "恒等式 all-reduce = reduce-scatter + all-gather 在数学上等价（都把每 rank M/N 的部分和最终广播给所有 ran…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 55,
+    "anchor": "v04-q-55",
+    "title": "多 NIC rail / topology-optimized routing 怎么配？Sibling NIC 检测怎么做？",
+    "lede": "H100 / GB200 训练机型每节点带 8 张 IB NIC（每张 200G 或 400G），NCCL 默认会探测 PCIe 拓扑把 GPU↔NIC 配对（…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 56,
+    "anchor": "v04-q-56",
+    "title": "🧭 综合比较：FSDP2 vs DeepSpeed ZeRO-3 vs Megatron-LM TP+PP+DP，70B / 405B / 671B MoE 三档规模分别选哪个？",
+    "lede": "70B 稠密模型优先 FSDP2（HYBRID_SHARD）+ TP=2/4，405B 稠密模型用 Megatron-Core 3D 并行（TP=8 + PP=…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 57,
+    "anchor": "v04-q-57",
+    "title": "🧭 综合场景：256 卡 H100 训 70B BF16，MFU 只有 32%，期望 50%+，给出完整定位与优化路径",
+    "lede": "先做三层 profile（端到端 step time、单 rank 算子 timeline、跨 rank 通信对齐），按「计算瓶颈 → 通信瓶颈 → IO/调度…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 58,
+    "anchor": "v04-q-58",
+    "title": "🧭 综合估算：405B 模型用 1T token、FSDP2+TP=8+PP=4、1024 张 H100，端到端要多少天？显存怎么估？",
+    "lede": "FLOPs 总量约 2.4e24，1024 张 H100 BF16 假设 MFU 40%，需要约 28 天；显存上单卡需 ~70 GB（参数+梯度+优化器+激活…"
+  },
+  {
+    "vol": "04-distributed-training",
+    "vol_num": 4,
+    "vol_title": "分布式训练与大模型并行",
+    "q": 59,
+    "anchor": "v04-q-59",
+    "title": "🧭 综合设计：为 1k–10k 卡训练平台设计自动并行策略选择器（输入：模型架构 + cluster 拓扑 + SLO；输出：TP/PP/DP/CP/EP）",
+    "lede": "选择器本质是一个「带约束的离散优化问题」：把 TP/PP/DP/CP/EP 看成 5 维搜索空间，约束是显存上限、通信拓扑、SLO（step time / MF…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 1,
+    "anchor": "v05-q-1",
+    "title": "ZeRO-Offload 如何将 optimizer state offload 到 CPU？带宽瓶颈？",
+    "lede": "ZeRO-Offload 的核心做法，是把 optimizer state（以及常见实现里与优化器更新强相关的计算）从 GPU 挪到 CPU 侧保存和执行，从而…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 2,
+    "anchor": "v05-q-2",
+    "title": "DeepSpeed-Infinity 如何利用 NVMe 扩展显存？",
+    "lede": "DeepSpeed-Infinity 把“显存不够”问题扩展成 GPU 显存、CPU 内存、NVMe 三层存储协同问题，通过分层 offload 和按需预取，把…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 3,
+    "anchor": "v05-q-3",
+    "title": "激活检查点的 checkpoint_sequential 和 checkpoint 区别？",
+    "lede": "checkpoint 是通用接口，适合包裹任意一段前向函数；checkpoint_sequential 是面向顺序模块容器的便捷封装，会把一串层按 segmen…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 4,
+    "anchor": "v05-q-4",
+    "title": "显存碎片问题在分布式场景下更严重吗？如何解决？",
+    "lede": "分布式场景下，显存碎片往往更容易暴露，也更难稳定复现，因为每个 rank 的张量生命周期、通信缓冲区申请时机、动态 shape 和重叠策略都可能不同。它不一定让…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 5,
+    "anchor": "v05-q-5",
+    "title": "torch.cuda.empty_cache() 的副作用？为什么不能频繁调用？",
+    "lede": "torch.cuda.empty_cache() 只会把 PyTorch 缓存分配器中“当前未被张量占用”的空闲块释放回 CUDA 驱动，并不会释放正在使用的张…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 6,
+    "anchor": "v05-q-6",
+    "title": "如何估算大模型训练所需的显存？公式推导？",
+    "lede": "训练显存估算是把峰值时刻的显存拆成参数、梯度、优化器状态、激活、通信缓冲区与碎片冗余几部分分别求和。最常用的一阶公式可写成：M_peak ≈ M_param +…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 7,
+    "anchor": "v05-q-7",
+    "title": "gradient checkpointing 和 activation compression 的结合？",
+    "lede": "gradient checkpointing 与 activation compression 可以叠加使用，前者通过“少存、多算”减少激活数量，后者通过“照样…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 8,
+    "anchor": "v05-q-8",
+    "title": "CPU offload 和 GPU 计算的流水线重叠如何实现？",
+    "lede": "CPU offload 要真正有效，关键不在“能搬”，而在“搬运与计算重叠”。通常通过预取、异步 memcpy、双缓冲、分 bucket 调度和 stream/…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 9,
+    "anchor": "v05-q-9",
+    "title": "多节点场景下的显存优化策略差异？",
+    "lede": "多节点场景下，显存优化不再只是“单卡能不能放下”，而是“跨节点通信是否会把显存节省换成更大的网络等待”。因此同样的显存优化策略，在单机多卡和多节点中优先级会不同…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 10,
+    "anchor": "v05-q-10",
+    "title": "显存优化的 ROI 如何评估？训练速度 vs 模型规模的 trade-off？",
+    "lede": "显存优化的 ROI 不能只看“省了多少 GB”，而要看“多出来的显存是否转化成了更有价值的训练目标”，例如更大模型、更长序列、更大 micro-batch 或更…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 11,
+    "anchor": "v05-q-11",
+    "title": "NCCL 的 Tree 算法和 Ring 算法分别在什么场景下更快？",
+    "lede": "一般规律是：小消息、节点数较多、时延敏感时，Tree 往往更快；大消息、链路带宽更关键、需要持续灌满互联时，Ring 往往更快。Ring 更接近带宽最优，Tre…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 12,
+    "anchor": "v05-q-12",
+    "title": "如何计算 all-reduce 的通信量？公式是什么？",
+    "lede": "计算 all-reduce 通信量时，要先区分“每个 rank 的通信量”和“整个集群的总通信量”。对最常见的 Ring all-reduce，若张量大小为 N…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 13,
+    "anchor": "v05-q-13",
+    "title": "NVLink、InfiniBand、TCP 的带宽和延迟差异？",
+    "lede": "三者可以粗略理解为三个层级：NVLink 面向节点内 GPU-GPU 高带宽低时延互联，通常最快；InfiniBand 面向跨节点 RDMA 网络，带宽和时延明…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 14,
+    "anchor": "v05-q-14",
+    "title": "多机训练中的网络拓扑感知？NCCL_TOPO_FILE？",
+    "lede": "多机训练中的拓扑感知，本质是让通信库知道“哪些 GPU 离哪些 NIC 更近、哪些链路更快、节点内和节点间如何分层”，从而构造更合理的 ring/tree 路径…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 15,
+    "anchor": "v05-q-15",
+    "title": "通信和计算重叠（overlap）的技术手段？double buffering？",
+    "lede": "通信和计算重叠的目标，是把原本串行的“反向计算完再通信”改造成流水线，让通信尽量藏在前向/反向或参数更新计算之后。常见手段包括梯度分桶、异步 collectiv…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 16,
+    "anchor": "v05-q-16",
+    "title": "torch.distributed 的 backend 选择：nccl、gloo、mpi？",
+    "lede": "torch.distributed 的 backend 选择，是在“硬件互联、设备类型、部署环境、collective 性能”之间做匹配。对多 GPU 训练，尤…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 17,
+    "anchor": "v05-q-17",
+    "title": "RDMA 技术原理？RoCE v1 vs RoCE v2 vs InfiniBand？",
+    "lede": "RDMA 的核心价值，是让一台机器能够以很低 CPU 参与度、很少数据拷贝和较低时延，直接访问另一台机器的内存缓冲区。InfiniBand 是原生 RDMA 网…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 18,
+    "anchor": "v05-q-18",
+    "title": "如何诊断网络拥塞导致的训练卡顿？iftop、nicstat？",
+    "lede": "诊断网络拥塞导致的训练卡顿，关键不是只看“带宽打满没有”，而是把训练 step 长尾、collective 等待、NIC 计数器、交换机拥塞信号和节点间不均衡一…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 19,
+    "anchor": "v05-q-19",
+    "title": "自定义通信算子的实现？torch.distributed 的 reduce_op？",
+    "lede": "在 PyTorch 里，“自定义通信算子”要先区分两层含义：一层是自定义通信调度与压缩逻辑，另一层是自定义底层 collective 语义。对大多数训练工程，真…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 20,
+    "anchor": "v05-q-20",
+    "title": "异构网络环境下的通信优化策略？",
+    "lede": "异构网络环境下的优化核心，不是强行把所有节点当成同质资源，而是显式识别快链路与慢链路，并让通信路径、并行切分和调度策略与这种差异对齐。常见做法是分层通信、拓扑感…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 21,
+    "anchor": "v05-q-21",
+    "title": "nvidia-smi 的 dmon、pmon 模式区别？",
+    "lede": "dmon 是设备级周期采样，适合观察整卡的 SM 利用率、显存控制器利用率、功耗、温度、时钟等时间序列；pmon 是进程级采样，适合定位当前有哪些 PID 在占…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 22,
+    "anchor": "v05-q-22",
+    "title": "Nsight Systems 的 timeline 分析？如何识别 gap？",
+    "lede": "Nsight Systems 的核心价值，是把 CPU 线程、CUDA API、stream、kernel、memcpy、NCCL/通信事件放到统一时间轴上，回…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 23,
+    "anchor": "v05-q-23",
+    "title": "Nsight Compute 的 roofline model 分析？",
+    "lede": "Roofline model 用“算术强度（Arithmetic Intensity）”与“性能屋顶（Roof）”来判断 kernel 更偏算力受限还是带宽受限…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 24,
+    "anchor": "v05-q-24",
+    "title": "PyTorch Profiler 的 memory profiling 功能？",
+    "lede": "PyTorch Profiler 的 memory profiling 主要用于观察张量分配、释放、峰值内存与算子关联，回答“显存为什么涨、哪一段达到峰值、是否…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 25,
+    "anchor": "v05-q-25",
+    "title": "torch.autograd.profiler 的 record_shapes 和 profile_memory？",
+    "lede": "record_shapes=True 用于记录算子输入张量形状，便于识别动态 shape、广播和异常大张量；profile_memory=True 用于记录算子…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 26,
+    "anchor": "v05-q-26",
+    "title": "Chrome Trace Viewer 解读 PyTorch profiler 输出？",
+    "lede": "Chrome Trace Viewer 解读 PyTorch profiler 输出的关键，不是机械地看哪一行最宽，而是沿统一时间轴同时看 step 边界、CP…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 27,
+    "anchor": "v05-q-27",
+    "title": "perf 和 eBPF 在 CPU 侧的 profiling？",
+    "lede": "perf 与 eBPF 都是 CPU 侧 profiling 的核心工具，但关注点不同：perf 更适合先做热点采样和硬件事件统计，回答“CPU 时间主要花在哪…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 28,
+    "anchor": "v05-q-28",
+    "title": "网络性能分析？iperf、qperf？",
+    "lede": "网络性能分析通常先做链路基线，再对照真实训练或服务流量验证。iperf 更适合 TCP/UDP 吞吐、多流并发与丢包抖动测试，回答“这条链路大致能跑多快”；qp…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 29,
+    "anchor": "v05-q-29",
+    "title": "存储 IO 分析？fio、iostat？",
+    "lede": "存储 I/O 分析通常分为“在线观测”和“可控压测”两类：iostat 更适合看系统当前到底发生了什么，回答“设备是否已忙、延迟是否在飙升”；fio 更适合构造…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 30,
+    "anchor": "v05-q-30",
+    "title": "如何构建端到端的性能监控 dashboard？",
+    "lede": "端到端性能监控 dashboard 的目标，不是罗列尽可能多的指标，而是建立从业务吞吐到 GPU、CPU、网络、存储的分层因果链，让人能先发现异常，再快速下钻到…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 31,
+    "anchor": "v05-q-31",
+    "title": "训练速度的 scaling efficiency 计算？理想 vs 实际？",
+    "lede": "scaling efficiency 用来衡量“加了更多 GPU 或节点之后，吞吐是否接近线性增长”。理想情况是资源翻倍、吞吐也翻倍，对应效率为 100%；实际…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 32,
+    "anchor": "v05-q-32",
+    "title": "通信时间的 breakdown 分析？all-reduce、all-gather 占比？",
+    "lede": "通信时间 breakdown 的目标，是把“step 里有多少时间花在通信”进一步拆成具体 collective、等待与重叠关系，回答到底是 all-reduc…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 33,
+    "anchor": "v05-q-33",
+    "title": "算子级别的耗时分析？torch.ops.aten 的 dispatch？",
+    "lede": "算子级耗时分析的重点，是把高层模块耗时下钻到具体 aten/operator 事件，区分“Python 调用了什么算子”“dispatcher 把请求路由到哪个…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 34,
+    "anchor": "v05-q-34",
+    "title": "Python 层面的 profiling？cProfile、py-spy？",
+    "lede": "Python 层 profiling 主要回答“解释器与业务脚本时间花在哪”，典型用于排查 dataloader、预处理、调度、回调、训练循环胶水代码等 CPU…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 35,
+    "anchor": "v05-q-35",
+    "title": "性能回归（regression）的自动化检测？",
+    "lede": "性能回归自动化检测的核心，不是每次 benchmark 后做一次简单同比，而是建立“可重复基线 + 稳定环境 + 统计判定 + 自动告警/阻断”闭环。理想输出应…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 36,
+    "anchor": "v05-q-36",
+    "title": "CPU offload 的 pin_memory 和 non_blocking？",
+    "lede": "pin_memory 与 non_blocking 解决的是 host-device 数据搬运链路上的两个不同问题：前者决定 CPU 侧缓冲区是否使用 page…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 37,
+    "anchor": "v05-q-37",
+    "title": "数据预处理的 multi-processing 优化？num_workers 调优？",
+    "lede": "数据预处理 multi-processing 的目标，是让输入流水线持续喂满训练设备，而不是机械地把 num_workers 调到越大越好。最优 worker…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 38,
+    "anchor": "v05-q-38",
+    "title": "DALI 的 GPU decoding 和 augmentation？",
+    "lede": "DALI 的价值，在于把输入流水线中可并行、可设备化的部分，如图像解码、resize、crop、normalize、颜色扰动等，尽量下沉到高效的 C++/CUD…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 39,
+    "anchor": "v05-q-39",
+    "title": "混合精度训练的 numerical stability 问题？",
+    "lede": "混合精度训练的核心风险，是低精度格式在动态范围与有效精度上的限制会放大 underflow、overflow、舍入误差与不稳定归约，进而导致 loss 变成 N…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 40,
+    "anchor": "v05-q-40",
+    "title": "gradient accumulation 的 effective batch size 计算？",
+    "lede": "梯度累积的 effective batch size，就是“每次参数更新实际聚合了多少样本/token 的梯度”。在最常见、无额外加权的场景下，effectiv…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 41,
+    "anchor": "v05-q-41",
+    "title": "大 batch 训练的 learning rate scaling 规则？",
+    "lede": "大 batch 训练的 learning rate scaling 没有一条对所有模型都成立的万能公式，但最常见有两类：一是线性缩放（batch 放大 k 倍，…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 42,
+    "anchor": "v05-q-42",
+    "title": "LARS、LAMB 优化器在大 batch 场景的应用？",
+    "lede": "LARS 和 LAMB 都是为大 batch 训练缓解“统一全局学习率不适配不同层参数尺度”问题而设计的。LARS 主要服务于 SGD/动量系优化器，在大规模视…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 43,
+    "anchor": "v05-q-43",
+    "title": "模型并行的 communication hiding 技术？",
+    "lede": "模型并行中的 communication hiding，本质是把 all-gather、reduce-scatter、send/recv、参数预取等通信，尽量塞…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 44,
+    "anchor": "v05-q-44",
+    "title": "pipeline bubble 的数学分析和优化？",
+    "lede": "pipeline bubble 是流水线并行中因填充（fill）和排空（drain）导致的设备空转。最经典的均衡分析下，若有 p 个 stage、m 个 mic…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 45,
+    "anchor": "v05-q-45",
+    "title": "稀疏 attention 的优化？Sparse Transformer、Longformer？",
+    "lede": "稀疏 attention 的核心目标，是把标准 self-attention 的 O(n^2) 计算和显存开销，替换为更接近 O(n * w) 或块稀疏复杂度，…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 46,
+    "anchor": "v05-q-46",
+    "title": "POSIX vs object storage 在 ML 数据集与 checkpoint 场景的取舍？",
+    "lede": "POSIX 文件系统（本地盘、NFS、Lustre、GPFS）擅长低延迟元数据、随机读写与原地修改，object storage（S3、GCS、OSS 等）擅长…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 47,
+    "anchor": "v05-q-47",
+    "title": "S3 上传 / 下载吞吐调优：multipart、并行度、prefetch、Range 读？",
+    "lede": "S3 的单连接吞吐受限于 TCP 拥塞窗口与 HTTPS 握手开销，单流通常只能跑到几百 MB/s，要打满 25 Gb/s 甚至 100 Gb/s 网卡必须靠多…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 48,
+    "anchor": "v05-q-48",
+    "title": "Lustre 在 ML 集群中的部署与 stripe 调优？",
+    "lede": "Lustre 是高性能并行文件系统，由 MDS（元数据服务）+ 多个 OSS（对象存储服务）+ 客户端构成。ML 集群里它的核心价值是单文件可被多节点并行读 /…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 49,
+    "anchor": "v05-q-49",
+    "title": "GPFS / Spectrum Scale 与 Lustre 的选型对比？",
+    "lede": "GPFS（IBM Spectrum Scale）和 Lustre 都是并行文件系统，但定位不同：GPFS 偏企业级、强一致、丰富功能（快照、加密、ILM、多协议…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 50,
+    "anchor": "v05-q-50",
+    "title": "元数据操作（mkdir / rename / stat 风暴）对训练的影响？",
+    "lede": "元数据风暴是分布式训练里被低估的杀手：几千个 DataLoader worker 同时 stat/open/mkdir 几十万小文件，MDS（无论 Lustre…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 51,
+    "anchor": "v05-q-51",
+    "title": "HDF5 / Parquet / TFRecord / WebDataset 数据格式选型？",
+    "lede": "ML 数据集格式四大主流：HDF5 偏科学数据 + 随机切片、Parquet 偏结构化列存 + 分析查询、TFRecord 偏TF 生态顺序流、WebDatas…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 52,
+    "anchor": "v05-q-52",
+    "title": "DataLoader workers 与文件系统、page cache 的交互？",
+    "lede": "PyTorch DataLoader 的 num_workers 决定了多少个独立进程在并行做 IO + decode，但它们的实际吞吐受文件系统并发能力、pa…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 53,
+    "anchor": "v05-q-53",
+    "title": "大模型 checkpoint IO：异步 / 增量 / 分片？",
+    "lede": "大模型 checkpoint 单次 100GB–10TB，串行写一次要几十分钟到几小时，直接训练阻塞写不可接受。生产做法是分片（每 rank 写自己那部分，并发…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 54,
+    "anchor": "v05-q-54",
+    "title": "torch.distributed.checkpoint（DCP）实战：保存、加载、resume？",
+    "lede": "PyTorch DCP 是官方推荐的分布式 checkpoint API，核心抽象是 Planner（决定每 rank 写什么）+ StorageWriter/…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 55,
+    "anchor": "v05-q-55",
+    "title": "共享存储下的并发写：fsync、文件锁、原子 rename？",
+    "lede": "多 rank 并发写共享存储，三大原语决定正确性：fsync 保证数据真的落盘、文件锁（flock/fcntl）保证临界区互斥、原子 rename 保证读者永远…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 56,
+    "anchor": "v05-q-56",
+    "title": "数据集本地缓存策略：rsync、s5cmd、shared block cache？",
+    "lede": "对象存储或慢速网络盘上的数据集，要靠节点本地缓存才能让 GPU 吃饱。三类典型方案：rsync 适合定期全量 / 增量同步预编排目录；s5cmd 适合 S3 大…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 57,
+    "anchor": "v05-q-57",
+    "title": "NVMe 本地盘 vs 网络存储 的训练吞吐对比与混用？",
+    "lede": "NVMe 本地盘单盘顺序读 3–14 GB/s（PCIe Gen4–Gen5），延迟 < 100µs；高端共享盘（Lustre、GPFS、专用 NVMe-oF）…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 58,
+    "anchor": "v05-q-58",
+    "title": "ramdisk / tmpfs 用于热数据的容量配置与风险？",
+    "lede": "Linux tmpfs（/dev/shm、/tmp if mounted as tmpfs、ramdisk）是基于内存的文件系统，访问速度等于 DRAM 带宽（…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 59,
+    "anchor": "v05-q-59",
+    "title": "/dev/shm 容量耗尽如何排查与扩容？",
+    "lede": "/dev/shm 满直接表现为 PyTorch DataLoader 报 “Bus error” / RuntimeError: unable to write…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 60,
+    "anchor": "v05-q-60",
+    "title": "mmap 对大数据集加载的加速与 page cache 行为？",
+    "lede": "mmap 把文件映射到进程虚拟地址空间，访问时触发缺页中断，由内核走 page cache 把数据搬上来。对大数据集随机切片（embedding 表、向量索引、…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 61,
+    "anchor": "v05-q-61",
+    "title": "Nsight Systems 进阶：scope filter、CUDA Graph 节点级 trace、跨进程对齐？",
+    "lede": "Nsight Systems 的入门用法是抓一段 timeline 看 gap，进阶用法是要把\"采集范围、CUDA Graph 内部节点、跨进程对齐\"这三件事调…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 62,
+    "anchor": "v05-q-62",
+    "title": "HTA（Holistic Trace Analysis）跨 rank 时间线对齐与瓶颈识别？",
+    "lede": "HTA 是 Meta 开源的 PyTorch profiler trace 后处理库（2022 年开源，2024 年起加入 PyTorch 生态），定位是\"把上…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 63,
+    "anchor": "v05-q-63",
+    "title": "PyTorch memory snapshot：_record_memory_history、_dump_snapshot、memory_viz 流程？",
+    "lede": "torch.cuda.memory._record_memory_history + _dump_snapshot 是 PyTorch 2.1 起官方推荐的显存…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 64,
+    "anchor": "v05-q-64",
+    "title": "PyTorch profiler + TensorBoard plugin 集成：op-level、shape、stack？",
+    "lede": "torch.profiler 是 PyTorch 1.8+ 的官方 profiler（取代老的 torch.autograd.profiler），配合 torc…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 65,
+    "anchor": "v05-q-65",
+    "title": "Continuous profiling 系统（pyroscope / parca）在 ML 集群中的部署与开销？",
+    "lede": "Pyroscope（Grafana 收购，2023 起内置 Grafana 栈）和 Parca（Polar Signals 开源，纯 eBPF）是两个主流 co…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 66,
+    "anchor": "v05-q-66",
+    "title": "比较题：activation checkpointing 全层 vs selective vs attention 边界三种策略",
+    "lede": "三种策略：全层重计算最省显存但慢约 25%；selective（每 N 层重计算一次）权衡灵活；attention 边界重计算（只保留 attention 输入…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 67,
+    "anchor": "v05-q-67",
+    "title": "场景题：NCCL all-reduce p99 从 30ms 涨到 200ms，怎么三层定位？",
+    "lede": "三层定位：NIC 层（硬件错误 / 限速 / 重传）→ 拓扑层（NCCL 路径选错 / 网卡绑定漂移 / NUMA cross）→ 应用层（gradient b…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 68,
+    "anchor": "v05-q-68",
+    "title": "估算题：H100 NVL8 单机 70B BF16 FSDP2 训练每 step 的通信量 / HBM 带宽 / launch 次数",
+    "lede": "70B BF16 模型权重 140GB，FSDP2 每 step all-gather + reduce-scatter 全部参数：通信量 ~280GB / s…"
+  },
+  {
+    "vol": "05-memory-communication-profiling",
+    "vol_num": 5,
+    "vol_title": "卷五：内存、通信与性能剖析",
+    "q": 69,
+    "anchor": "v05-q-69",
+    "title": "设计题：万卡集群显存与通信可观测性栈（OOM / 掉速 5 分钟定位）",
+    "lede": "四层栈：1) 节点级（DCGM + 自研 GPU agent，每 5s 上报 power/util/mem/Xid）；2) 通信级（NCCL_DEBUG 日志…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 1,
+    "anchor": "v06-q-1",
+    "title": "TensorRT 的 builder 和 runtime 工作流程？plan 文件包含什么？",
+    "lede": "TensorRT 通常分为离线构建与在线执行两阶段：builder 负责把网络定义、权重、精度约束、shape 范围与 tactic 搜索结果编译成可执行引擎；…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 2,
+    "anchor": "v06-q-2",
+    "title": "TensorRT 的 dynamic shape 优化技巧？optimization profile？",
+    "lede": "TensorRT 的 dynamic shape 不是“任意形状自动高效”，而是在给定 shape 范围内，通过 optimization profile 为不…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 3,
+    "anchor": "v06-q-3",
+    "title": "TensorRT 的 plugin 开发中，IPluginV2DynamicExt 和 IPluginV2IOExt 区别？",
+    "lede": "IPluginV2DynamicExt 面向显式 batch 和动态 shape 场景，是当前更常用、能力更完整的插件接口；IPluginV2IOExt 更偏早…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 4,
+    "anchor": "v06-q-4",
+    "title": "ONNX Runtime 的 execution provider 有哪些？CUDA、TensorRT、DirectML？",
+    "lede": "ONNX Runtime（ORT）的 execution provider（EP）是其异构执行后端抽象，用来把同一 ONNX 计算图分派到不同硬件或库上执行。常…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 5,
+    "anchor": "v06-q-5",
+    "title": "torch.compile 的推理优化模式？reduce-overhead vs max-autotune？",
+    "lede": "torch.compile 在推理场景下会通过图捕获、算子融合、代码生成与后端调优降低 Python 调度和 kernel launch 开销。mode 参数目…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 6,
+    "anchor": "v06-q-6",
+    "title": "vLLM 的 PagedAttention 核心思想？block table 的数据结构？",
+    "lede": "PagedAttention 的核心思想是把 KV 缓存从“每个请求一整段连续大内存”改为“按固定大小 block 分页管理”，再通过 block table…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 7,
+    "anchor": "v06-q-7",
+    "title": "vLLM 的 continuous batching 如何实现？和 static batching 的吞吐对比？",
+    "lede": "连续批处理的核心是“请求不按固定 batch 边界进出，而是在每个 decoding step 动态重组活跃请求集合”。vLLM 会把新到达请求、正在 pref…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 8,
+    "anchor": "v06-q-8",
+    "title": "vLLM 的 prefix caching 机制？命中率如何提升？",
+    "lede": "prefix caching 的核心是把多个请求共享的前缀 prompt 对应的 KV blocks 缓存下来，使后续具有相同前缀的请求跳过重复 prefill…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 9,
+    "anchor": "v06-q-9",
+    "title": "TensorRT-LLM 的 in-flight batching 原理？",
+    "lede": "TensorRT-LLM 的 in-flight batching 也是一种面向生成式推理的动态批处理机制：允许不同请求在运行过程中加入、退出并与现有请求共同组…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 10,
+    "anchor": "v06-q-10",
+    "title": "FasterTransformer 的 decoder 优化技术？memory layout 优化？",
+    "lede": "FasterTransformer 的 decoder 优化重点在于把自回归生成中的热点路径——尤其是 masked self-attention、KV 缓存读…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 11,
+    "anchor": "v06-q-11",
+    "title": "Hugging Face 的 text-generation-inference（TGI）架构？",
+    "lede": "TGI 可以理解为“围绕大模型在线生成场景封装的一套推理服务栈”，其核心不是单一 kernel，而是把 HTTP/gRPC 接入、请求队列、连续批处理、KV 缓…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 12,
+    "anchor": "v06-q-12",
+    "title": "llama.cpp 的量化策略？Q4_0、Q5_K_M 的区别？",
+    "lede": "llama.cpp 的量化策略就是 GGUF/GGML 体系下的“按块低比特权重量化 + 针对 CPU/边端访存优化的数据布局”。它提供从 2-bit 到 8-…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 13,
+    "anchor": "v06-q-13",
+    "title": "移动端推理框架选择？MNN、TNN、Paddle Lite 对比？",
+    "lede": "移动端推理框架选择没有绝对最优，核心看目标平台、模型来源、算子覆盖、包体限制、硬件加速支持与团队维护成本。MNN、TNN、Paddle Lite 都是国内较常见…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 14,
+    "anchor": "v06-q-14",
+    "title": "推理引擎的 warmup 为什么重要？如何设计 warmup 策略？",
+    "lede": "warmup 的意义在于把首次请求才会触发的高成本动作提前完成，避免冷启动抖动直接暴露给真实用户。对推理引擎而言，首次执行常伴随 kernel lazy ini…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 15,
+    "anchor": "v06-q-15",
+    "title": "多 stream 推理的实现？CUDA stream 的同步机制？",
+    "lede": "多 stream 推理的目标是让数据拷贝、前后处理、多个请求或多个阶段的 GPU 工作尽可能重叠执行，从而提升设备利用率并减少空转。实现上通常为不同请求、不同…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 16,
+    "anchor": "v06-q-16",
+    "title": "推理 batching 的 padding 和 packing 策略？FlashAttention 的变长支持？",
+    "lede": "推理 batching 中，padding 与 packing 的本质区别在于：padding 用额外空 token 把样本补齐到统一长度，便于张量并行计算；p…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 17,
+    "anchor": "v06-q-17",
+    "title": "如何评估推理引擎的延迟分布？P50、P90、P99 的优化重点？",
+    "lede": "评估推理引擎不能只看平均时延，必须看端到端延迟分布，尤其是 P50、P90、P99 等分位数。P50 更代表常态路径是否高效，P90 反映系统在中高负载下是否开…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 18,
+    "anchor": "v06-q-18",
+    "title": "推理服务的 auto-scaling 策略？基于 GPU 利用率还是请求队列？",
+    "lede": "推理服务的 auto-scaling 不应只看单一 GPU 利用率，也不应只看请求队列长度，而应基于服务形态选择主导信号并做多指标联合决策。对在线交互式推理，队…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 19,
+    "anchor": "v06-q-19",
+    "title": "多模型混部的资源隔离？MPS（Multi-Process Service）？",
+    "lede": "多模型混部的目标是在提高 GPU 利用率的同时，避免模型之间互相争抢算力、显存和带宽。资源隔离不能只靠“放在同一张卡上跑”，而要从显存、计算份额、调度优先级、故…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 20,
+    "anchor": "v06-q-20",
+    "title": "推理引擎的 debug 模式？如何定位精度下降问题？",
+    "lede": "推理引擎的 debug 模式是把高性能执行路径暂时“降速增观测”，通过关闭部分融合、保留中间张量、输出算子级日志、固定随机性和切换参考后端，定位数值偏差究竟发生…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 21,
+    "anchor": "v06-q-21",
+    "title": "INT8 量化的 symmetric 和 asymmetric 区别？per-tensor vs per-channel？",
+    "lede": "INT8 量化可从“零点是否固定在 0”与“scale 的作用粒度”两个维度理解。symmetric 量化通常令 zero-point 为 0，映射简单、硬件实…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 22,
+    "anchor": "v06-q-22",
+    "title": "SmoothQuant 的原理？为什么能同时保持权重和激活的量化精度？",
+    "lede": "SmoothQuant 的核心思想是把激活中的离群值难题，离线迁移一部分到权重侧，从而把“难量化的激活”变平滑。它通过在相邻线性变换之间引入可逆的通道缩放，把激…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 23,
+    "anchor": "v06-q-23",
+    "title": "AWQ（Activation-aware Weight Quantization）的核心思想？",
+    "lede": "AWQ 的核心思想是：虽然推理时只量化权重，但量化优劣应由激活来指导。它通过少量校准数据观察哪些权重通道对激活更敏感，然后优先保护这部分关键权重，减少它们的量化…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 24,
+    "anchor": "v06-q-24",
+    "title": "GPTQ 的 one-shot 量化流程？OBQ（Optimal Brain Quantization）？",
+    "lede": "GPTQ 是一种面向大模型的 one-shot 后训练权重量化方法，核心是按层、按块依次量化权重，并用近似二阶信息补偿已引入的误差。它继承了 OBQ 的基本思想…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 25,
+    "anchor": "v06-q-25",
+    "title": "GGUF 格式的量化级别？Q4_K_M 适合什么场景？",
+    "lede": "GGUF 是 llama.cpp 生态常见的模型封装格式，既保存模型权重，也保存 tokenizer、元数据和量化类型信息。其量化级别可粗略理解为从更轻量的 Q…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 26,
+    "anchor": "v06-q-26",
+    "title": "FP8 量化的硬件支持？H100 的 Transformer Engine？",
+    "lede": "FP8 不是“任意 GPU 上都能高效跑”的通用低精度格式，它高度依赖硬件和内核生态支持。H100 所在的 Hopper 架构是 FP8 落地的关键节点，提供了…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 27,
+    "anchor": "v06-q-27",
+    "title": "量化校准（calibration）的数据集选择？多少样本足够？",
+    "lede": "校准集的核心要求不是“大”，而是“代表真实推理分布”。它的作用是估计激活范围、outlier 和量化 scale，而不是重新训练模型。因此样本应覆盖线上高频输入…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 28,
+    "anchor": "v06-q-28",
+    "title": "量化后的精度损失如何快速定位？layer-wise 的 sensitivity 分析？",
+    "lede": "快速定位量化精度损失的核心方法是“先确定偏差从哪一层开始，再判断是哪种量化配置触发”。layer-wise sensitivity 分析是在比较不同层对量化误差…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 29,
+    "anchor": "v06-q-29",
+    "title": "k-means 量化和非均匀量化的应用场景？",
+    "lede": "k-means 量化属于典型的非均匀量化方法，核心思想是用有限个聚类中心而不是等间距刻度来表示权重或激活。它在权重分布明显非高斯、存在多峰或 outlier、且…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 30,
+    "anchor": "v06-q-30",
+    "title": "二值化网络（BNN）在推理优化中的实际价值？",
+    "lede": "BNN 的理论吸引力很强：权重和激活可被压到 1 bit，存储与算术复杂度都极低，甚至可把乘加近似替换为 XNOR + bitcount。但从今天的主流生产推理…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 31,
+    "anchor": "v06-q-31",
+    "title": "知识蒸馏在推理优化中的作用？MiniLLM、DistilBERT？",
+    "lede": "知识蒸馏在推理优化中的核心价值，是把大模型的行为迁移到更小、更浅、更便宜的学生模型上，从而直接降低参数量、KV 缓存、显存占用和单次前向 FLOPs。与单纯做量…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 32,
+    "anchor": "v06-q-32",
+    "title": "结构化剪枝和非结构化剪枝的硬件友好性？",
+    "lede": "结构化剪枝通常比非结构化剪枝更硬件友好。前者直接删掉整个通道、头、卷积核、块或层，使张量形状真实变小，便于继续走标准 dense kernel；后者主要把单个权…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 33,
+    "anchor": "v06-q-33",
+    "title": "动态量化（Dynamic Quantization）和静态量化的 runtime 开销？",
+    "lede": "动态量化的 runtime 开销通常高于静态量化，因为它需要在推理时为激活动态计算量化参数并执行额外的 quantize/dequantize 步骤；静态量化则…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 34,
+    "anchor": "v06-q-34",
+    "title": "量化算子的融合？quantize-linear + matmul + dequantize？",
+    "lede": "量化算子融合的目标，是把 quantize -> linear/matmul -> dequantize 这样的链路尽量折叠成一个更大的 fused kerne…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 35,
+    "anchor": "v06-q-35",
+    "title": "混合精度推理的策略？哪些层必须保持 FP16？",
+    "lede": "混合精度推理的核心策略，是把“大多数算力密集但数值相对稳定”的层降到更低精度执行，同时让少数数值敏感层保留 FP16、BF16 甚至 FP32。严格来说，很少有…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 36,
+    "anchor": "v06-q-36",
+    "title": "Triton Inference Server 的 model ensemble 如何使用？",
+    "lede": "Triton 的 model ensemble 用于把多个模型或处理步骤串成一个统一推理入口，使客户端只调用一个 endpoint，就能完成预处理、主模型推理、…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 37,
+    "anchor": "v06-q-37",
+    "title": "Triton 的 dynamic batching 和 preferred batch size 配置？",
+    "lede": "Triton 的 dynamic batching 用于把短时间窗口内到达的多个请求自动聚合成更大的 batch，以提升 GPU 利用率与吞吐；preferre…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 38,
+    "anchor": "v06-q-38",
+    "title": "推理服务的 A/B testing 如何实现？模型版本管理？",
+    "lede": "推理服务的 A/B testing 就是“把流量按规则稳定分配到不同模型版本，并持续比较业务指标与系统指标”；模型版本管理则是“让每个上线版本可追踪、可回滚、可…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 39,
+    "anchor": "v06-q-39",
+    "title": "Kubernetes + NVIDIA GPU Operator 的部署经验？",
+    "lede": "在 Kubernetes 中使用 NVIDIA GPU Operator，核心价值是把驱动、container toolkit、device plugin、DC…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 40,
+    "anchor": "v06-q-40",
+    "title": "GPU 虚拟化方案？MIG（Multi-Instance GPU）的配置？",
+    "lede": "GPU 虚拟化常见有三类：时间片共享（time-slicing）、设备透传/直通、硬件分区。MIG 属于 NVIDIA 在部分数据中心 GPU 上提供的硬件级分…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 41,
+    "anchor": "v06-q-41",
+    "title": "推理请求的 priority scheduling 实现？weighted fair queuing？",
+    "lede": "推理服务的 priority scheduling 不能只做“高优先级先来先服务”，否则低优请求容易长期饥饿。更常见的做法是把请求拆成可调度的 token bu…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 42,
+    "anchor": "v06-q-42",
+    "title": "长文本请求的 preemption 策略？KV cache 的 swap out？",
+    "lede": "长文本请求最容易拖垮在线推理系统的地方，不是单次算力峰值，而是它持续占用 prefill 时间片与大量 KV 缓存。通常不会让超长请求一次性跑完整个 prefi…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 43,
+    "anchor": "v06-q-43",
+    "title": "推理服务的 health check 和 graceful degradation？",
+    "lede": "推理服务的 health check 不能只回答“进程活着没有”，还要回答“当前能不能稳定接流量、性能是否已退化到需要摘流”。因此通常要把探针拆成 livene…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 44,
+    "anchor": "v06-q-44",
+    "title": "如何监控推理服务的 GPU memory 泄漏？",
+    "lede": "监控 GPU memory 泄漏，关键不是看某一时刻显存高不高，而是看在负载稳定、请求完成和 cache 可回收的前提下，显存占用是否持续单调上升且无法回落。必…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 45,
+    "anchor": "v06-q-45",
+    "title": "推理模型的 hot reload 如何实现？零停机更新？",
+    "lede": "推理模型的 hot reload 本质不是“在原地把权重替换掉”，而是“让新旧模型版本在一段时间内并存，并通过原子切流完成版本切换”。要做到零停机，通常需要版本…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 46,
+    "anchor": "v06-q-46",
+    "title": "gRPC vs REST for inference？性能差异和适用场景？",
+    "lede": "在推理服务里，gRPC 通常更适合服务间调用和低时延、高吞吐场景；REST 更适合对外开放接口、跨语言/浏览器接入和调试友好场景。单次请求负载较小、调用频繁、需…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 47,
+    "anchor": "v06-q-47",
+    "title": "推理批处理的 timeout 处理？部分结果返回？",
+    "lede": "推理批处理中的 timeout 不能只设一个总超时，而应拆成“入队等待超时、组 batch 超时、执行超时、流式空闲超时”四类。部分结果返回是否可行，取决于 b…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 48,
+    "anchor": "v06-q-48",
+    "title": "多租户场景下的资源配额管理？quota、limit、request？",
+    "lede": "多租户推理服务的资源管理不能只盯 CPU/内存/GPU 容器配额，还要把 QPS、并发数、token rate（RPM/TPM）、上下文长度、KV 缓存、模型副…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 49,
+    "anchor": "v06-q-49",
+    "title": "推理服务的 cost optimization 策略？Spot instance 的使用？",
+    "lede": "推理成本优化的核心不是单纯“压低机器单价”，而是同时优化单位请求消耗、资源利用率和 SLA 违约成本。常见手段包括模型分层、量化、批处理、缓存、自动伸缩、异构实…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 50,
+    "anchor": "v06-q-50",
+    "title": "Edge deployment 的挑战？模型加密、设备兼容性？",
+    "lede": "边缘部署的难点不只是“把模型放到设备上跑起来”，而是要同时解决设备异构、资源受限、离线升级、模型资产保护和现场稳定性。模型加密能提升模型文件在传输与静态存储阶段…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 51,
+    "anchor": "v06-q-51",
+    "title": "LLM 推理服务的 SLO 体系：TTFT / TPOT / p99 / saturation？",
+    "lede": "LLM 推理服务的 SLO 不能只盯端到端 latency，而要拆成\"首 token 时延 TTFT、token 间隔时延 TPOT、整体 latency、错误…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 52,
+    "anchor": "v06-q-52",
+    "title": "长尾请求与超时处理：streaming idle timeout、token-budget timeout、abort 协议？",
+    "lede": "LLM 推理的超时不能用传统 HTTP 全局 timeout 一刀切，原因是流式接口正常生成几分钟也很常见。需要分四类超时分别处理：连接 idle timeou…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 53,
+    "anchor": "v06-q-53",
+    "title": "vLLM / SGLang 调度器调优实战（chunked prefill、prefix cache hit、preemption 策略）？",
+    "lede": "vLLM 与 SGLang 的调度器决定了在线 LLM 服务的实际表现。调优的三个最高杠杆点：分块 prefill 的 token budget、prefix…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 54,
+    "anchor": "v06-q-54",
+    "title": "推理服务的灰度发布与 canary：模型版本切换、A/B 测试、回滚信号？",
+    "lede": "LLM 推理的灰度发布比传统微服务更复杂：模型本身是黑盒，质量回归需要看人工与自动评测，单纯监控错误率不够；模型权重大、加载慢，回滚不能瞬时完成；KV 缓存与模…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 55,
+    "anchor": "v06-q-55",
+    "title": "在线 + 离线 batch 的混合调度：优先级、SLO 对齐、抢占与 KV cache 复用？",
+    "lede": "在同一集群同时跑在线推理与离线批量任务（如评测、数据合成、批量打分）能显著提升 GPU 利用率（典型 30%—50% → 70%—90%），但前提是必须有严格的…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 56,
+    "anchor": "v06-q-56",
+    "title": "比较题：vLLM v1 vs SGLang 0.4+ vs TensorRT-LLM 四类业务下的选型",
+    "lede": "普通 chat：vLLM v1（生态最广、模型最全）；agent / 多轮 / RAG：SGLang（RadixAttention 命中率高）；长上下文 / 极…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 57,
+    "anchor": "v06-q-57",
+    "title": "场景题：70B 推理服务 TTFT p99 从 300ms 涨到 1.5s 但 TPOT 不变",
+    "lede": "三层定位：1) 队列堆积（chunked prefill 配置错或 max_num_seqs 不够）；2) prefix cache miss（流量模式变化 /…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 58,
+    "anchor": "v06-q-58",
+    "title": "估算题：70B FP8 服务在 4× H200 上的 tokens/$ 估算",
+    "lede": "70B FP8 TP=4 H200：tokens/s ≈ 2000–3000（中等 batch、平均 prompt 2k、output 300）。4× H200…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 59,
+    "anchor": "v06-q-59",
+    "title": "设计题：支持多模型 / 多版本 / 多硬件后端的 LLM serving 网关",
+    "lede": "五层架构：1) gateway（鉴权、限流、路由）；2) router（A/B、灰度、sticky）；3) engine pool（vLLM / SGLang…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 60,
+    "anchor": "v06-q-60",
+    "title": "PD 时域分离 vs 物理分离 vs Chunked Prefill 三角横向对比",
+    "lede": "三种方案的核心差异：（1）PD 时域分离：单卡内按时间片切分跑 prefill 和 decode batch，简单但容量受单卡限制；（2）Physical di…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 61,
+    "anchor": "v06-q-61",
+    "title": "vLLM v0 → v1 架构演进与升级要点",
+    "lede": "vLLM v1 (2024 重写) vs v0 (~2023 早期) 关键变化：（1）Scheduler：v0 是 monolithic；v1 切分清晰的 pr…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 62,
+    "anchor": "v06-q-62",
+    "title": "SGLang RadixAttention 实现原理",
+    "lede": "SGLang RadixAttention 是改进版 prefix cache：用 radix tree（前缀树）维护所有 active sequence 的…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 63,
+    "anchor": "v06-q-63",
+    "title": "Mooncake disaggregated 真实落地拆解",
+    "lede": "Mooncake 是月之暗面（Moonshot AI）公开的 Kimi 推理系统架构。核心创新：（1）Prefill / Decode 分池：prefill p…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 64,
+    "anchor": "v06-q-64",
+    "title": "LMCache 跨节点 KV cache 服务",
+    "lede": "LMCache 是跨节点 KV cache 服务：（1）独立 service 存 KV cache blob，多 inference instance 共享访问…"
+  },
+  {
+    "vol": "06-inference-quantization-serving",
+    "vol_num": 6,
+    "vol_title": "第六册：推理、量化与服务化",
+    "q": 65,
+    "anchor": "v06-q-65",
+    "title": "Multi-LoRA Serving 与 Punica/S-LoRA 高并发优化",
+    "lede": "Multi-LoRA serving 是 enterprise LLM 常见需求（每客户 fine-tune 自家 LoRA，serving 共享 base m…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 1,
+    "anchor": "v07-q-1",
+    "title": "大模型 checkpoint 的存储格式？safetensors vs pytorch.bin？",
+    "lede": "大模型 checkpoint 常见格式包括 PyTorch 原生的 pytorch_model.bin/*.bin 与 safetensors。safetens…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 2,
+    "anchor": "v07-q-2",
+    "title": "分布式文件系统的选择？Lustre、GPFS、Alluxio？",
+    "lede": "Lustre、GPFS（IBM Storage Scale）与 Alluxio 分别代表不同定位。Lustre 和 GPFS 更接近底层高性能共享存储，适合承载…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 3,
+    "anchor": "v07-q-3",
+    "title": "训练数据的 caching 策略？SSD 作为 burst buffer？",
+    "lede": "训练数据 caching 的目标是把远端存储访问转化为更稳定、更低时延的本地或近端访问。常见策略包括节点本地 page cache、进程内样本缓存、节点本地 N…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 4,
+    "anchor": "v07-q-4",
+    "title": "大模型权重的高效加载？memory mapping、lazy loading？",
+    "lede": "大模型权重高效加载的核心不是单纯“读得快”，而是降低冷启动总时延、减少内存峰值并避免重复拷贝。常用手段包括 memory mapping、lazy loadin…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 5,
+    "anchor": "v07-q-5",
+    "title": "多节点间的 checkpoint 同步？asynchronous checkpoint？",
+    "lede": "多节点 checkpoint 同步的本质是在训练吞吐、恢复点精度与存储可靠性之间做平衡。同步 checkpoint 最简单可靠，但会阻塞训练；asynchron…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 6,
+    "anchor": "v07-q-6",
+    "title": "数据加载的 bottleneck 诊断？nvidia-smi dmon？",
+    "lede": "数据加载 bottleneck 的诊断核心是先判断 GPU 是否在“等数据”，再定位瓶颈落在 CPU 解码、DataLoader worker、磁盘、网络、对象…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 7,
+    "anchor": "v07-q-7",
+    "title": "DALI（NVIDIA Data Loading Library）的使用场景？",
+    "lede": "DALI 适合数据预处理已经成为训练瓶颈、且样本处理流程高度规则化的场景，尤其是图像分类、检测、视频训练等视觉任务。它的核心价值是把解码、resize、crop…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 8,
+    "anchor": "v07-q-8",
+    "title": "训练数据的 sharding 策略？按文件 vs 按样本？",
+    "lede": "训练数据 sharding 没有绝对统一答案。按文件分片实现简单、顺序 I/O 友好、易于与存储系统配合；按样本分片负载更均衡、shuffle 更细、对长尾样本…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 9,
+    "anchor": "v07-q-9",
+    "title": "云存储（S3、OSS）与本地存储的性能差异？s3fs？",
+    "lede": "云对象存储与本地存储最大的差异不只是带宽，而是访问语义和时延特征。本地 SSD/NVMe 适合低延迟、小随机读、mmap 与高 IOPS；S3、OSS 这类对象…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 10,
+    "anchor": "v07-q-10",
+    "title": "大规模数据集的 metadata 管理？parquet、arrow？",
+    "lede": "大规模数据集的 metadata 管理是在“可查询、可演化、可复现”和“访问开销低”之间平衡。通常不会把 metadata 继续散落在海量小 JSON 或目录命…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 11,
+    "anchor": "v07-q-11",
+    "title": "Slurm 的 sbatch 脚本编写？gres 资源申请？",
+    "lede": "sbatch 脚本就是“资源声明 + 运行命令”两部分：前半段用 #SBATCH 指令描述分区、节点数、任务数、CPU、内存、时长和 GPU 等资源，后半段负责…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 12,
+    "anchor": "v07-q-12",
+    "title": "Kubernetes 的 volcano 调度器在 AI 场景的应用？",
+    "lede": "Volcano 是面向 batch / AI 工作负载的 Kubernetes 调度增强方案，核心价值不在“替代原生 scheduler 的所有能力”，而在于补…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 13,
+    "anchor": "v07-q-13",
+    "title": "训练任务的 gang scheduling？PyTorchJob 的 operator？",
+    "lede": "gang scheduling 的核心思想是“要么整组训练进程一起启动，要么都先别启动”，它主要解决分布式训练对同步启动和资源完整性的强依赖。PyTorchJo…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 14,
+    "anchor": "v07-q-14",
+    "title": "多租户集群的 resource quota 和 priority class？",
+    "lede": "多租户 GPU 集群里，ResourceQuota 负责回答“一个租户最多能占多少资源”，PriorityClass 负责回答“当资源冲突时谁更重要”。前者解决…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 15,
+    "anchor": "v07-q-15",
+    "title": "GPU 集群的 topology awareness 调度？NVLink 拓扑？",
+    "lede": "GPU 集群的 topology awareness 调度，核心是在调度阶段显式考虑 GPU 之间、GPU 与 CPU NUMA 之间、GPU 与 NIC 之间…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 16,
+    "anchor": "v07-q-16",
+    "title": "训练任务的 preemption 和 checkpoint & resume？",
+    "lede": "训练任务的 preemption 就是平台为了提升集群利用率、保障高优先级任务或应对弹性资源回收，对低优先级训练作业进行中断和重调度。要让 preemption…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 17,
+    "anchor": "v07-q-17",
+    "title": "集群的 utilization 监控？Prometheus + Grafana？",
+    "lede": "集群 utilization 监控的核心不是只看平均 GPU 利用率，而是同时回答“资源有没有被分配出去”“被分配后有没有真正跑满”“为什么没跑满”。Prome…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 18,
+    "anchor": "v07-q-18",
+    "title": "多集群的 federated learning 基础设施？",
+    "lede": "多集群 federated learning 基础设施的核心不是把训练任务简单分发到多个集群，而是在弱信任、跨地域、异构网络和数据不出域的约束下，完成模型下发、…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 19,
+    "anchor": "v07-q-19",
+    "title": "训练任务的 cost accounting？按 GPU 小时计费？",
+    "lede": "训练任务的 cost accounting 目标不是简单记一笔“用了多少 GPU 小时”，而是把资源消耗、租户归属、硬件差异和作业效率统一量化，为预算控制、内部…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 20,
+    "anchor": "v07-q-20",
+    "title": "集群的 heterogeneous GPU 管理？A100、H100、4090 混部？",
+    "lede": "异构 GPU 管理的核心不是把所有卡放进同一个资源池就结束，而是让不同代际、不同性能、不同互联和不同可靠性特征的 GPU 被正确标识、隔离、调度和计费。A100…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 21,
+    "anchor": "v07-q-21",
+    "title": "设计一个支持1000卡规模的训练平台，核心组件有哪些？",
+    "lede": "支持 1000 卡规模的训练平台，不是把更多 GPU 拼起来，而是把调度、存储、网络、镜像、观测、容错与权限治理做成可协同扩展的系统。核心组件通常包括：资源与租…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 22,
+    "anchor": "v07-q-22",
+    "title": "训练平台的 job scheduler 如何设计？FIFO vs priority vs fair sharing？",
+    "lede": "训练平台的 job scheduler 不应只选择 FIFO、priority 或 fair sharing 其中一种，而应采用“队列准入 + 优先级排序 +…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 23,
+    "anchor": "v07-q-23",
+    "title": "分布式存储的选择？Ceph、JuiceFS、GPFS 对比？",
+    "lede": "Ceph、JuiceFS、GPFS 分别代表不同层级与侧重点。Ceph 是通用分布式存储底座，既可做对象、块，也可通过 CephFS 提供文件语义；JuiceF…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 24,
+    "anchor": "v07-q-24",
+    "title": "训练容器的镜像管理？layer caching、registry 优化？",
+    "lede": "训练容器镜像管理的目标不是“把镜像放进 registry”这么简单，而是降低大规模作业冷启动时的拉取风暴、减少镜像体积、提升层复用率并保证版本可追溯。对训练平台…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 25,
+    "anchor": "v07-q-25",
+    "title": "网络架构设计？InfiniBand vs RoCE？fat-tree 拓扑？",
+    "lede": "训练平台网络架构的核心目标是为分布式训练提供高带宽、低时延、低丢包和可预测的尾延迟。InfiniBand 和 RoCE 都能支撑 RDMA 通信，但前者更偏专用…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 26,
+    "anchor": "v07-q-26",
+    "title": "故障检测和自动恢复机制？heartbeat、watchdog？",
+    "lede": "训练平台的故障检测与自动恢复，是在“尽快发现失效”和“避免误判导致无谓重启”之间做平衡。heartbeat 更偏存活信号与状态上报，用于判断进程、节点、agen…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 27,
+    "anchor": "v07-q-27",
+    "title": "训练数据的 global shuffle 实现？shuffle buffer 大小？",
+    "lede": "训练数据的 global shuffle 目标是让样本顺序在全局尺度上足够随机，从而减少训练偏置和批次相关性；但真正的“完全随机置换”在超大规模数据集上往往代价…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 28,
+    "anchor": "v07-q-28",
+    "title": "模型仓库的设计？版本管理、血缘追踪？",
+    "lede": "模型仓库不应只是一个“存权重文件的目录”，而应是集模型版本、元数据、生命周期、权限、发布流程和血缘追踪于一体的注册中心。版本管理解决“现在该用哪个模型、如何回滚…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 29,
+    "anchor": "v07-q-29",
+    "title": "超参搜索（HPO）的基础设施？Optuna、Ray Tune 集成？",
+    "lede": "HPO 基础设施的核心不是“并发跑很多实验”，而是把搜索空间定义、trial 调度、早停剪枝、结果汇总、资源隔离和可复现实验记录做成标准化平台能力。Optuna…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 30,
+    "anchor": "v07-q-30",
+    "title": "训练平台的 multi-tenancy 隔离？namespace、cgroup？",
+    "lede": "训练平台的 multi-tenancy 隔离不能只靠一个 namespace 或一组 cgroup 完成，而是需要从控制面、调度面、运行时、网络、存储和审计面做…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 31,
+    "anchor": "v07-q-31",
+    "title": "资源碎片整理（defragmentation）策略？",
+    "lede": "训练平台里的 defragmentation 是在“不增加总资源”的前提下，提高可分配大块连续资源的概率，避免集群看似空闲、却无法启动大作业。它通常不是单一算法…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 32,
+    "anchor": "v07-q-32",
+    "title": "训练任务的 dry-run 和 profiling 模式？",
+    "lede": "dry-run 和 profiling 模式都是“正式开跑前的低成本验证”，但关注点不同。dry-run 主要验证配置、依赖、权限、资源申请与分布式启动链路是否…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 33,
+    "anchor": "v07-q-33",
+    "title": "模型压缩服务的集成？量化、剪枝流水线？",
+    "lede": "模型压缩服务不应只是离线脚本集合，而应被纳入模型平台的标准后处理流水线，围绕“输入模型 -> 压缩变换 -> 校准/微调 -> 评测验收 -> 产物登记 ->…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 34,
+    "anchor": "v07-q-34",
+    "title": "训练平台的 cost model？预测任务耗时和资源需求？",
+    "lede": "训练平台的 cost model 不只是做账单，而是要在任务提交前预测“需要多少资源、跑多久、花多少钱、是否值得抢占/扩容/降配”。一个可用的 cost mod…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 35,
+    "anchor": "v07-q-35",
+    "title": "如何支持异构计算？CPU、GPU、TPU 统一调度？",
+    "lede": "支持异构计算的关键不是把 CPU、GPU、TPU 强行抽象成完全一样的资源，而是在统一控制面下提供一致的作业接口、资源描述、调度策略和生命周期管理，同时保留不同…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 36,
+    "anchor": "v07-q-36",
+    "title": "训练平台的 SLA 定义？job completion time 保证？",
+    "lede": "训练平台的 SLA 不能只定义“集群可用”，还要把用户真正关心的排队时延、启动成功率、训练中断恢复时间和 job completion time（JCT）纳入承…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 37,
+    "anchor": "v07-q-37",
+    "title": "数据隐私和合规？联邦学习基础设施？",
+    "lede": "训练平台的数据隐私与合规核心在于“数据最小可见、全链路可审计、用途受约束、跨边界流动可控”。联邦学习基础设施则是在不集中汇聚原始数据的前提下，提供跨机构协同训练…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 38,
+    "anchor": "v07-q-38",
+    "title": "训练平台的 disaster recovery？跨地域备份？",
+    "lede": "训练平台的灾备目标不是“所有组件双活”这么简单，而是要明确哪些能力必须在故障后多快恢复、最多丢多少状态。通常按控制面、元数据面、训练状态面和数据面分别定义 RT…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 39,
+    "anchor": "v07-q-39",
+    "title": "模型 CI/CD 流水线？自动化测试、benchmark？",
+    "lede": "模型 CI/CD 的核心不是把代码仓库的 CI 直接照搬到模型领域，而是围绕“训练配置、模型工件、评测结果、部署发布”构建可回归、可准入、可回滚的流水线。自动化…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 40,
+    "anchor": "v07-q-40",
+    "title": "训练平台的 observability？日志、指标、链路追踪？",
+    "lede": "训练平台 observability 的目标不是“把日志都收上来”，而是能快速回答作业为什么慢、为什么挂、瓶颈在数据/计算/通信哪一层、以及故障影响了哪些租户和…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 41,
+    "anchor": "v07-q-41",
+    "title": "设计一个支持10万QPS的大模型推理服务？",
+    "lede": "支持 10 万 QPS 的大模型推理服务，不是单机极限优化，而是“流量分层 + 模型分层 + 计算分层 + 缓存分层”的整体系统设计。核心目标通常不是让所有请求…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 42,
+    "anchor": "v07-q-42",
+    "title": "推理服务的 auto-scaling 策略？HPA、VPA、KEDA？",
+    "lede": "推理服务的 auto-scaling 不能只看 CPU 或 GPU 利用率，而要围绕“排队深度、请求时延、batch 饱和度、显存水位、模型冷启动成本”设计。H…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 43,
+    "anchor": "v07-q-43",
+    "title": "多模型 multi-tenancy 的 GPU 共享？MPS vs MIG？",
+    "lede": "多模型 multi-tenancy 下的 GPU 共享，MPS 和 MIG 解决的是不同层面问题。MPS 主要解决多个 CUDA 进程共享同一张 GPU 的并发…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 44,
+    "anchor": "v07-q-44",
+    "title": "推理请求的 routing 策略？least loaded、consistent hashing？",
+    "lede": "推理 routing 没有单一最优策略，必须看请求是否有会话状态、实例之间是否共享 KV 缓存、模型是否多副本异构部署。least loaded 适合无状态或弱…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 45,
+    "anchor": "v07-q-45",
+    "title": "边缘推理的 model caching 策略？CDN for models？",
+    "lede": "边缘推理的 model caching 目标是减少跨地域拉取时延、降低中心存储带宽压力，并让边缘节点在弱网环境下也能快速完成模型热启动。CDN for mode…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 46,
+    "anchor": "v07-q-46",
+    "title": "推理服务的 A/B testing 和 canary deployment？",
+    "lede": "推理服务中的 A/B testing 与 canary deployment 解决的是两个相邻但不同的问题：canary 更关注变更发布风险控制，目标是在小流量…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 47,
+    "anchor": "v07-q-47",
+    "title": "长文本生成的 streaming 实现？Server-Sent Events？",
+    "lede": "长文本生成的 streaming 是把 token 级或 chunk 级生成结果以增量方式推送给客户端，降低首 token 等待时间并改善交互体验。对 Web…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 48,
+    "anchor": "v07-q-48",
+    "title": "推理结果的 caching 策略？prompt 级别的 deduplication？",
+    "lede": "推理结果 caching 的目标是减少重复计算、降低成本并缩短响应时间，但前提是请求具有足够高的可复用性。对于确定性强、重复 prompt 多、输出变化容忍度高…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 49,
+    "anchor": "v07-q-49",
+    "title": "多模态推理的 pipeline 设计？图文、视频？",
+    "lede": "多模态推理 pipeline 的核心是把异构输入统一转换为模型可消费的表示，并在吞吐、时延和成本之间做好分层处理。图文场景通常由文本预处理、图像解码/缩放、视觉…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 50,
+    "anchor": "v07-q-50",
+    "title": "推理服务的 safety guardrails？内容过滤、速率限制？",
+    "lede": "推理服务的 safety guardrails 是一组围绕输入、输出、行为与资源的防护机制，不是单一的内容过滤器。其目标一方面是降低有害内容、越权调用、提示词注…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 51,
+    "anchor": "v07-q-51",
+    "title": "模型 fine-tuning as a service 的架构？",
+    "lede": "fine-tuning as a service 就是“训练平台产品化”。它需要把底座模型、数据集、训练 recipe、作业调度、评测验收、模型注册、部署发布与…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 52,
+    "anchor": "v07-q-52",
+    "title": "推理服务的 cost optimization？spot instance、batching？",
+    "lede": "推理成本优化不是单点技巧，而是容量规划、模型选择、实例类型、调度策略与请求聚合共同作用的结果。对实时在线流量，核心目标是提升单位 GPU 的有效 token 吞…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 53,
+    "anchor": "v07-q-53",
+    "title": "模型 on-device 部署的 infra 支持？Core ML、TFLite？",
+    "lede": "on-device 部署的基础设施不是简单“把模型转成手机能跑的格式”，而是一整套模型导出、算子兼容、量化压缩、设备能力探测、版本分发、灰度回滚和端侧观测体系。…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 54,
+    "anchor": "v07-q-54",
+    "title": "推理服务的 latency SLO 保证？p99 < 100ms 如何实现？",
+    "lede": "要把推理服务的 p99 控制在 100ms 内，不是追求单次 kernel 足够快，而是把整条链路做成“有预算、有限流、有缓冲、有隔离”的低尾延迟系统。关键做法…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 55,
+    "anchor": "v07-q-55",
+    "title": "推理请求的 admission control？防止过载？",
+    "lede": "admission control 的目标是在请求真正占用稀缺推理资源之前，决定是接受、延迟、降级还是拒绝，从而把系统维持在可控工作区间内。它比普通 rate…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 56,
+    "anchor": "v07-q-56",
+    "title": "模型 ensemble 和 cascade 的架构设计？",
+    "lede": "ensemble 和 cascade 都是多模型协同推理架构，但目标不同。ensemble 侧重提升准确率、鲁棒性和稳定性，通常把多个模型的输出做融合；casc…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 57,
+    "anchor": "v07-q-57",
+    "title": "推理服务的 debuggability？request tracing、model versioning？",
+    "lede": "推理服务的可调试性依赖两件事：一是请求链路可追踪，二是模型与配置可精确复现。仅有日志或 metrics 不足以解释线上异常，必须把 request tracin…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 58,
+    "anchor": "v07-q-58",
+    "title": "实时推理和离线推理的统一架构？",
+    "lede": "实时推理和离线推理可以共用模型资产、执行契约和控制面，但不应强行共用同一条执行链路。统一架构的关键是“控制面统一、数据面分层”：模型仓库、特征/预处理逻辑、版本…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 59,
+    "anchor": "v07-q-59",
+    "title": "推理服务的 security？模型加密、API 认证？",
+    "lede": "推理服务安全需要覆盖模型资产、API 接入、运行时、网络和供应链多个层面，不能只做单点鉴权。模型加密主要保护权重与派生产物不被未授权获取，API 认证主要保证调…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 60,
+    "anchor": "v07-q-60",
+    "title": "推理平台的 carbon footprint 优化？绿色AI？",
+    "lede": "推理平台的碳足迹优化，是在满足质量与 SLA 的前提下，提升“有效输出 / 能耗 / 碳排”的效率。绿色 AI 不是只看训练阶段，推理阶段的持续负载、空闲冗余、…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 61,
+    "anchor": "v07-q-61",
+    "title": "SLURM sbatch 脚本最佳实践？节点选择、内存声明、时间预算、邮件通知如何配？",
+    "lede": "生产级 sbatch 脚本应被视为“作业契约”：把节点形态（分区、节点数、每节点 task/CPU/内存/GPU、约束）、时间预算、I/O 路径、失败行为和通知…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 62,
+    "anchor": "v07-q-62",
+    "title": "SLURM srun vs sbatch 怎么用？交互式调试、长跑作业、步骤化作业的边界？",
+    "lede": "sbatch 是\"提交一个批处理脚本，由 controller 异步排队执行\"，srun 是\"在已分配资源里启动一个 step（或同步申请并执行）\"。日常用法上…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 63,
+    "anchor": "v07-q-63",
+    "title": "SLURM preempt / requeue 策略怎么设计？SignalHandler、checkpoint 集成怎么做？",
+    "lede": "preempt + requeue 是大集群把\"高优作业插队\"和\"训练作业不丢进度\"两个目标缝合的关键机制：低优作业被高优抢占时，SLURM 先按配置发 gra…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 64,
+    "anchor": "v07-q-64",
+    "title": "SLURM Heterogeneous job 怎么用？训练-推理混合、多 partition、--hetjob 实战？",
+    "lede": "Heterogeneous job（--hetjob / : 语法）让一个作业同时申请多组形态不同的资源——例如 16 个 H100 训练节点 + 4 个 CP…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 65,
+    "anchor": "v07-q-65",
+    "title": "SLURM gres GPU 资源声明怎么写？--gpus / --gres / --gpus-per-task / NUMA-aware 怎么选？",
+    "lede": "SLURM 在 GPU 资源声明上提供两套语义：旧式 --gres=gpu[:type]:N（每节点）和新式 --gpus[-per-node|-per-tas…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 66,
+    "anchor": "v07-q-66",
+    "title": "SLURM Topology-aware 调度怎么开？拓扑文件、TopologyParam、NCCL_TOPO_FILE 如何配？",
+    "lede": "拓扑感知调度让 SLURM 把作业的多节点尽量放进\"同一交换机 / 同一 rack / 同一 spine\"，从而压低 NCCL all-reduce 跨 spi…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 67,
+    "anchor": "v07-q-67",
+    "title": "SLURM 节点健康检测与自动隔离怎么做？HealthCheckProgram、节点 drain、out-of-band 检测？",
+    "lede": "节点健康自动隔离链路有三层：SLURM 内置周期 HealthCheckProgram 跑节点级脚本，发现异常 scontrol update NodeName…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 68,
+    "anchor": "v07-q-68",
+    "title": "SLURM Queue / partition / QoS 怎么设计？抢占、共享、独占、长短任务分流？",
+    "lede": "partition 是\"物理节点池 + 默认资源/时间限制\"的容器，QoS 是\"按用户/账号挂的优先级、抢占、配额\"维度，两者叠加形成\"哪些节点 + 多少资源…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 69,
+    "anchor": "v07-q-69",
+    "title": "SLURM Accounting / 配额怎么设计？sacct、sreport、Association、TRESBillingWeights？",
+    "lede": "SLURM 的 accounting 体系由 slurmdbd 持久化、AccountingStorageType=accounting_storage/slu…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 70,
+    "anchor": "v07-q-70",
+    "title": "SLURM 故障节点的自动重启与恢复怎么做？ReconfigFailedJob、Resv、节点 quarantine？",
+    "lede": "节点故障恢复链路：故障检测（HealthCheckProgram / OOB） → 自动 drain → 自动 reboot → 自动健康复检 → 自动 RES…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 71,
+    "anchor": "v07-q-71",
+    "title": "SLURM Custom prolog / epilog 脚本怎么写？cgroup、IB resource limits、NVIDIA driver health？",
+    "lede": "prolog/epilog 是\"作业开始前 / 结束后由 SLURM 自动跑的钩子\"，分 controller 级（PrologSlurmctld / Epil…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 72,
+    "anchor": "v07-q-72",
+    "title": "SLURM 与对象存储 / Lustre 的集成怎么做？scratch / fast / archive 三层存储如何分？",
+    "lede": "大模型训练的数据访问通常分三层：archive（S3/OSS/GCS 对象存储，PB 级、慢、便宜）、fast（Lustre/GPFS/WekaFS，TB-PB…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 73,
+    "anchor": "v07-q-73",
+    "title": "SLURM 调试作业失败怎么入手？scontrol show job、slurmctld 日志、stdout/stderr 路径？",
+    "lede": "调试 SLURM 作业失败按\"作业是否启动\"分两条主路径：未启动看 scontrol show job <id> 的 Reason 字段 + slurmctld…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 74,
+    "anchor": "v07-q-74",
+    "title": "SLURM 失败重试策略怎么设计？exit-code-based、time-limit-based、应用级 checkpoint resume？",
+    "lede": "重试策略要分两层：SLURM 层用 --requeue + 退出码语义让作业自动回队，应用层用 ckpt resume 让\"回队后从断点继续而不是从头跑\"。生产…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 75,
+    "anchor": "v07-q-75",
+    "title": "SLURM 跨集群联邦怎么落地？federation、scale-out 容量、跨 site 数据同步？",
+    "lede": "SLURM federation 让多个独立集群对外像\"一个超级集群\"：作业可以提交到任一成员集群，由 controller 协商在最优集群运行；常用于 sca…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 76,
+    "anchor": "v07-q-76",
+    "title": "大规模 GPU 集群的可观测性栈怎么搭？DCGM Exporter、Prometheus、Grafana、cluster-overview 仪表？",
+    "lede": "GPU 集群可观测性的事实标准是 \"DCGM Exporter（节点采集）+ Prometheus（指标存储）+ Grafana（可视化）+ Alertmana…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 77,
+    "anchor": "v07-q-77",
+    "title": "节点 image 与版本管理怎么做？BCM/Bright、Spack、Apptainer/Docker 怎么选？",
+    "lede": "GPU/HPC 集群的\"软件栈管理\"分三层：OS/驱动层用 BCM (Base Command Manager / 原 Bright Cluster Manag…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 78,
+    "anchor": "v07-q-78",
+    "title": "训练 vs 推理资源怎么不打架？分区、抢占、time-of-day 调度、bursting 到云？",
+    "lede": "\"训练与推理共享一个 GPU 池\"是高性价比但高风险的设计：训练吞吐高、容忍排队，推理低延迟、不能被打断。对策是显式隔离 + 受控共享：用 SLURM/K8s…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 79,
+    "anchor": "v07-q-79",
+    "title": "Spot/preemptible 实例怎么跟 ML 训练配合？checkpoint 频率、抢占信号、健壮性？",
+    "lede": "Spot/preemptible 实例（AWS Spot、GCP Preemptible、Azure Spot）便宜 60–90%，代价是\"随时可能在 30s–…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 80,
+    "anchor": "v07-q-80",
+    "title": "数据中心冷却与功耗怎么管？rack 级功率、HPC 机柜散热、训练负载的功耗包络？",
+    "lede": "现代 GPU 训练机柜功率密度已从传统 10–15kW/rack 飙到 40–80kW（H100 8 卡服务器约 10.2kW，5 台塞一柜就 50kW+），传…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 81,
+    "anchor": "v07-q-81",
+    "title": "比较题：SLURM vs Kubernetes (Volcano/Kueue) vs Ray 三套调度的取舍",
+    "lede": "SLURM：HPC 老大，gang scheduling、prolog/epilog 成熟，训练首选；K8s + Volcano/Kueue：云原生默认，资源…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 82,
+    "anchor": "v07-q-82",
+    "title": "场景题：1k 卡 H100 集群 JCT p99 比同行慢 2×，怎么从 4 个角度定位？",
+    "lede": "四角度：1) 调度（gang scheduling 配置 / 优先级权重）；2) 排队（队列深度、长任务饥饿）；3) 容错（节点故障率 + 恢复时间）；4) 资…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 83,
+    "anchor": "v07-q-83",
+    "title": "估算题：5k 卡集群 MTBF=30 天 + 30min ckpt 间隔下的 24h 训练成功率",
+    "lede": "5k 卡 / 单卡 MTBF=30 天 → 集群故障率 ~5000 / (30 × 24) ≈ 7 次/小时。一次故障让训练中断 + 恢复时间 = ckpt 间…"
+  },
+  {
+    "vol": "07-training-inference-platform",
+    "vol_num": 7,
+    "vol_title": "第七册：训练与推理平台",
+    "q": 84,
+    "anchor": "v07-q-84",
+    "title": "设计题：训练 + 在线推理 + RL rollout 三类负载的统一 GPU 平台",
+    "lede": "三层抽象：1) 资源池（按 priority class 划：critical / standard / preemptible）；2) 调度层（按负载选 SL…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 1,
+    "anchor": "v08-q-1",
+    "title": "哈希表的实现？冲突处理、扩容与复杂度？",
+    "lede": "哈希表通过哈希函数把 key 映射到桶，平均查询、插入、删除可做到 O(1)，但最坏情况仍可能退化到 O(n)。工程实现的复杂度主要集中在冲突处理、扩容策略与哈…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 2,
+    "anchor": "v08-q-2",
+    "title": "堆与优先队列？适用场景与复杂度？",
+    "lede": "堆是满足局部有序的完全二叉树，适合实现优先队列；插入和删除堆顶通常是 O(log n)，取堆顶是 O(1)。优先队列是抽象接口，堆是最常见的实现。"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 3,
+    "anchor": "v08-q-3",
+    "title": "跳表（Skip List）的原理？为什么能替代平衡树？",
+    "lede": "跳表通过多层索引把链表查找从 O(n) 降到期望 O(log n)，实现简单，常用于有序集合与内存索引。Redis 的 ZSet、LevelDB 的 MemTa…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 4,
+    "anchor": "v08-q-4",
+    "title": "Bloom Filter 的原理？误判与应用？",
+    "lede": "布隆过滤器适合判断“某元素一定不存在，或可能存在”，空间效率很高，但存在假阳性，不存在假阴性。典型用法是作为下游存储的“前置挡板”，把“肯定不存在”的请求挡在昂…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 5,
+    "anchor": "v08-q-5",
+    "title": "LRU/LFU 缓存淘汰策略？如何实现？",
+    "lede": "LRU 按最近最少使用淘汰，LFU 按最不经常使用淘汰；LRU 更常见，LFU 更适合长期热点稳定的场景。工业级实现普遍采用 W-TinyLFU、ARC、SLR…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 6,
+    "anchor": "v08-q-6",
+    "title": "Trie（前缀树）的实现？适合什么场景？",
+    "lede": "Trie 利用字符串公共前缀共享节点，适合前缀匹配、字典查询、自动补全等场景。它的真正价值是把\"按集合规模 N 分摊\"的查询，变成\"按串长 L 分摊\"的查询，即…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 7,
+    "anchor": "v08-q-7",
+    "title": "红黑树 vs AVL？平衡策略与权衡？",
+    "lede": "AVL 平衡更严格（任意节点左右子树高度差 ≤ 1），查询路径短而稳定；红黑树平衡更宽松（最长路径不超过最短路径的两倍），单次插入/删除最多只需常数次旋转，因此…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 8,
+    "anchor": "v08-q-8",
+    "title": "一致性哈希的原理？虚拟节点有什么作用？",
+    "lede": "一致性哈希把节点与 key 映射到环上，新增或删除节点时只需迁移 1/N 量级的数据，适合分布式缓存与分片路由。虚拟节点用于改善负载均衡，使每节点期望负载方差从…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 9,
+    "anchor": "v08-q-9",
+    "title": "倒排索引的结构？如何支持搜索？",
+    "lede": "倒排索引按\"词项 → 文档列表\"组织数据，是全文搜索系统（Lucene / Elasticsearch / OpenSearch / Solr）的核心结构。它把…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 10,
+    "anchor": "v08-q-10",
+    "title": "Bitmap / Bitset 的应用？优缺点是什么？",
+    "lede": "Bitmap 用位来表示布尔状态，空间效率极高，适合大规模集合判定、去重、权限标记与统计场景。Roaring Bitmap 已成为稀疏场景的事实标准（Druid…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 11,
+    "anchor": "v08-q-11",
+    "title": "Top K 问题怎么做？堆、快选、分治？",
+    "lede": "Top K 没有唯一解：在线流式场景常用堆，离线单次选择常用 quickselect，海量分布式场景常用局部 Top K 再汇总，\"近似 Top K\"则用 Co…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 12,
+    "anchor": "v08-q-12",
+    "title": "外部排序（External Sort）是什么？为什么适合大文件？",
+    "lede": "外部排序用于数据量大于内存容量的排序任务，核心思想是\"分块排序 + 多路归并\"。它是数据库 ORDER BY、MapReduce shuffle、Spark s…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 13,
+    "anchor": "v08-q-13",
+    "title": "LSM Tree 的原理？为什么写优化明显？",
+    "lede": "LSM Tree 通过先写内存、再顺序刷盘、后台合并的方式优化写入吞吐，常见于 RocksDB、LevelDB、Cassandra、HBase、ScyllaDB…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 14,
+    "anchor": "v08-q-14",
+    "title": "WAL（Write-Ahead Logging）是什么？为什么先写日志？",
+    "lede": "WAL 要求数据页落盘前，相关日志必须先持久化，用于崩溃恢复与保证事务持久性（ACID 中的 D）。它是 PostgreSQL、MySQL/InnoDB（red…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 15,
+    "anchor": "v08-q-15",
+    "title": "页缓存（Page Cache）与 mmap / buffered IO 的区别？",
+    "lede": "Page Cache 是内核对文件页的缓存机制；buffered IO 通过 read/write 系统调用访问它（涉及一次用户/内核间拷贝），mmap 把文件…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 16,
+    "anchor": "v08-q-16",
+    "title": "B+ tree 在数据库中的应用？为什么适合磁盘？",
+    "lede": "B+ tree 是数据库中最常见的磁盘索引结构之一，适合范围查询、顺序扫描与高扇出场景。它之所以适合磁盘，核心原因是树高低、节点与页大小匹配、I/O 次数少、叶…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 17,
+    "anchor": "v08-q-17",
+    "title": "实现一个 rate limiter？token bucket vs leaky bucket？",
+    "lede": "限流器用于控制请求速率、保护系统容量与隔离突发流量。常见方案包括 fixed window、sliding window、token bucket、leaky…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 18,
+    "anchor": "v08-q-18",
+    "title": "字符串匹配的 KMP 算法？prefix function？",
+    "lede": "KMP 用于在线性时间内完成单模式串匹配，核心是利用模式串自身的前后缀重合信息，避免主串回退。prefix function（或 next / lps 数组）描…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 19,
+    "anchor": "v08-q-19",
+    "title": "图算法的 shortest path？Dijkstra、Bellman-Ford？",
+    "lede": "最短路径问题要先区分边权条件。Dijkstra 适用于边权非负图，效率高；Bellman-Ford 可处理负权边，并能检测负环，但复杂度更高。算法选择的关键不是…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 20,
+    "anchor": "v08-q-20",
+    "title": "并查集（Union-Find）的实现？path compression？",
+    "lede": "并查集用于维护动态连通性，支持 find 和 union 两个核心操作。配合 path compression（路径压缩）与 union by rank / s…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 21,
+    "anchor": "v08-q-21",
+    "title": "TCP 和 RDMA 的对比？为什么 AI 训练需要 RDMA？",
+    "lede": "TCP 是通用、可靠、兼容性强的网络传输栈，适合绝大多数业务系统；RDMA（Remote Direct Memory Access）则面向低延迟、高吞吐、低 C…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 22,
+    "anchor": "v08-q-22",
+    "title": "InfiniBand 的 Verbs 编程？ibv_post_send？",
+    "lede": "InfiniBand Verbs 是用户态直接操作 RDMA 设备的核心编程接口，开发者通过创建 protection domain、memory region…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 23,
+    "anchor": "v08-q-23",
+    "title": "RoCE v2 的 ECN 和 PFC 拥塞控制？",
+    "lede": "RoCE v2 把 RDMA 报文封装在 UDP/IP 之上，能够运行在标准以太网络中，但为了让 RDMA 获得接近无损、低抖动的传输体验，通常需要配合 PFC…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 24,
+    "anchor": "v08-q-24",
+    "title": "多机训练的网络拓扑？fat-tree、dragonfly？",
+    "lede": "多机训练的网络拓扑直接影响 bisection bandwidth、路径长度、过订阅比、扩展成本与故障域。fat-tree 结构规则、等价多路径丰富，是传统 H…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 25,
+    "anchor": "v08-q-25",
+    "title": "NCCL 的 bootstrap 和 transport 层？",
+    "lede": "NCCL 可分为“先把通信世界建立起来，再在其上选具体数据通路”两层理解：bootstrap 层负责让所有 rank 互相发现、交换必要连接信息并完成 comm…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 26,
+    "anchor": "v08-q-26",
+    "title": "网络 jitter 对训练的影响？如何测量？",
+    "lede": "网络 jitter 会放大分布式训练中的 step time 抖动，尤其对 all-reduce、all-to-all、参数同步和流水线边界等待影响明显。训练是…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 27,
+    "anchor": "v08-q-27",
+    "title": "DPDK 在 AI 网络中的应用？",
+    "lede": "DPDK 的核心价值是绕过传统内核网络协议栈，以用户态轮询和零拷贝思路获得更低时延、更高包处理吞吐和更可控的 CPU 路径。在 AI 基础设施中，它更常用于高性…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 28,
+    "anchor": "v08-q-28",
+    "title": "RDMA 的 memory registration 开销？",
+    "lede": "RDMA memory registration 的成本通常不低，它会把用户态内存映射成 NIC 可访问的 memory region，并建立权限、地址转换和…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 29,
+    "anchor": "v08-q-29",
+    "title": "网络虚拟化？SR-IOV vs virtio？",
+    "lede": "网络虚拟化用于让虚拟机或容器在共享物理网络上获得隔离、可编排与多租户能力。SR-IOV 和 virtio 都是常见虚拟化网络方案，但侧重点不同：SR-IOV 追…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 30,
+    "anchor": "v08-q-30",
+    "title": "跨可用区（AZ）训练的网络挑战？",
+    "lede": "跨 AZ 训练最大的挑战不是“能不能连通”，而是跨 AZ 链路在时延、带宽、抖动、丢包域、计费和故障隔离上都明显劣于单 AZ 内网络。对强同步训练而言，这些差异…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 31,
+    "anchor": "v08-q-31",
+    "title": "容器运行时？containerd、cri-o？",
+    "lede": "容器运行时负责镜像管理、容器生命周期、OCI 执行与底层隔离资源配置。Kubernetes 通过 CRI 对接运行时，当前主流是 containerd 和 CR…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 32,
+    "anchor": "v08-q-32",
+    "title": "Kubernetes 的 CNI 插件？Calico、Cilium？",
+    "lede": "CNI 插件负责为 Pod 分配网络、配置接口与路由，并扩展实现网络策略、跨节点连通、负载均衡与可观测能力。Calico 和 Cilium 是 Kubernet…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 33,
+    "anchor": "v08-q-33",
+    "title": "GPU 虚拟化技术？vGPU、MIG、SR-IOV？",
+    "lede": "GPU 虚拟化的目标是把一张物理 GPU 的算力、显存或设备功能在多个租户之间隔离共享。常见方案包括软件/驱动主导的 vGPU、硬件分区导向的 MIG，以及设备…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 34,
+    "anchor": "v08-q-34",
+    "title": "存储的 CSI 驱动开发？",
+    "lede": "CSI（Container Storage Interface）把 Kubernetes 与具体存储系统解耦，CSI 驱动负责把“声明式卷需求”转化为实际的卷创…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 35,
+    "anchor": "v08-q-35",
+    "title": "etcd 在 K8s 中的作用？性能调优？",
+    "lede": "etcd 是 Kubernetes 的核心一致性存储，保存集群期望状态与关键元数据，apiserver 几乎所有对象读写都绕不过 etcd。它不仅是“数据库”，…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 36,
+    "anchor": "v08-q-36",
+    "title": "比较题：cgroup v2 vs Docker vs Kubernetes namespace 三层隔离对 GPU 负载的影响",
+    "lede": "cgroup v2 是 Linux 内核级（CPU/内存/IO/PID）；Docker 是容器化层（namespace + cgroup + image）；K8…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 37,
+    "anchor": "v08-q-37",
+    "title": "场景题：GPU util 正常但 step time 慢 30%，IO wait 不高 CPU 也正常——怎么排查？",
+    "lede": "五条排查路径：1) NUMA cross node（cudaMalloc 落到远端内存）；2) page cache pressure（系统在 reclaim）…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 38,
+    "anchor": "v08-q-38",
+    "title": "估算题：dataloader 在 H100 服务器（2 socket / 8 卡）上的最大吞吐与瓶颈",
+    "lede": "200KB/sample × num_workers=32 × pin_memory=True，单 worker 吞吐 ~5000 sample/s（NVMe…"
+  },
+  {
+    "vol": "08-systems-foundations",
+    "vol_num": 8,
+    "vol_title": "系统基础",
+    "q": 39,
+    "anchor": "v08-q-39",
+    "title": "设计题：训练节点完整系统 baseline（kernel param + cgroup + ulimit + IRQ + NUMA + HugePages）",
+    "lede": "六层 baseline：1) kernel 参数（vm.swappiness=10、vm.nr_hugepages=256、net.core.somaxconn…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 1,
+    "anchor": "v09-q-1",
+    "title": "公有云 vs 自建 GPU 集群：在 2025–2026 的算力市场怎么选？",
+    "lede": "做最终决策的不是\"哪种便宜\"，而是 峰值规模、确定性周期、毛利目标 三者的组合。一般经验：年消耗 < 5000 GPU-月、增长曲线不明朗、现金流紧 → 留在公…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 2,
+    "anchor": "v09-q-2",
+    "title": "AWS / GCP / Azure 三大云在 ML 训练侧的差异点是什么？",
+    "lede": "三家在单 GPU 价格上差距 < 10%，真正的差异在 GPU pod 网络拓扑、Capacity Block 机制、托管训练栈的成熟度。AWS 强在 EFA…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 3,
+    "anchor": "v09-q-3",
+    "title": "CoreWeave / Lambda / Crusoe / Nebius 这类 neocloud 怎么评估？",
+    "lede": "neocloud 的核心价值是 比三大云便宜 30%–50% 的 GPU-hour 单价，代价是合规深度浅、托管服务弱、单 region 容灾差。把它放在 \"训…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 4,
+    "anchor": "v09-q-4",
+    "title": "Spot / Reserved / On-demand / Capacity Block 四种采购模式怎么组合？",
+    "lede": "基线 reserved + 弹性 on-demand + 实验 spot + 集中突发 Capacity Block。reserved 比例覆盖你 12 个月…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 5,
+    "anchor": "v09-q-5",
+    "title": "长期 GPU 租赁谈判（1Y / 2Y / 3Y）的关键条款是什么？",
+    "lede": "长租谈判别只盯 $/GPU-hour。关键条款 5 条：单卡替换 SLA、网络收敛比承诺、计划停机窗口与计费、跨代升级权（H100 → H200 / B200…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 6,
+    "anchor": "v09-q-6",
+    "title": "二手 H100 / 灰市 GPU 的工程风险评估",
+    "lede": "二手 H100 在 2026 年灰市价格 $20k–$25k（vs 全新 $30k–$35k SXM 模组），价差 25%–35%。不建议用于生产训练或推理：风…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 7,
+    "anchor": "v09-q-7",
+    "title": "AWS / GCP / Azure 跨区域容量分布的战略意义？",
+    "lede": "2024–2026 年三大云的 H100/H200/B200 容量在 少数核心 region 集中：AWS us-east-1 / us-west-2 / eu…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 8,
+    "anchor": "v09-q-8",
+    "title": "ML 平台从单云到 multi-cloud 的演进时机？",
+    "lede": "别太早 multi-cloud。早期（< 1000 卡级）单云足够，跨云成本 > 收益。触发 multi-cloud 的 3 个信号：（1）单 vendor 容…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 9,
+    "anchor": "v09-q-9",
+    "title": "训练数据中心选址 / 自建机房的工程门槛",
+    "lede": "自建训练数据中心的真正门槛不是钱，是电力 + 冷却 + 网络运维团队。门槛量级：5 MW 起步、18–36 个月建设周期、需要 HPC 网络与液冷工程师团队 1…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 10,
+    "anchor": "v09-q-10",
+    "title": "训练硬件选型：H100 / H200 / B200 / MI300 / TPU v5p 决策矩阵",
+    "lede": "2026 年默认选 H200（成熟、生态完整、长租价格合理）；新建集群可以混 B200（FP4/FP8 训练吞吐 2–3× H100，但软件栈仍在打磨）；推理侧…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 11,
+    "anchor": "v09-q-11",
+    "title": "tokens / $ 作为推理产品的北极星指标怎么定义与跟踪？",
+    "lede": "tokens / $ = (有效输出 token 数) / (摊销后基础设施 + 模型 + 运维成本)，分母要覆盖训练摊销、GPU 租赁、网络出口、KV 缓存内…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 12,
+    "anchor": "v09-q-12",
+    "title": "MFU 与 HFU 的合理目标值与瓶颈分解",
+    "lede": "MFU（Model FLOPs Utilization） 是模型理论 FLOPs / 硬件理论 FLOPs。2026 年大规模训练经验：H100 BF16 训练…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 13,
+    "anchor": "v09-q-13",
+    "title": "训练预算反推：从模型规格到 GPU-月数",
+    "lede": "训练预算 ≈ 6 × N_params × N_tokens / (peak_FLOPs × MFU)，单位是 GPU-秒。换算成 GPU-月再叠加 1.3–1…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 14,
+    "anchor": "v09-q-14",
+    "title": "推理峰谷扩缩容：触发门槛与最小副本数",
+    "lede": "最小副本数 = 你能容忍的 cold-start 延迟 / 单副本启动时间。GPU 推理副本启动 60–300 秒，远高于 CPU 容器（5–15 秒），所以永…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 15,
+    "anchor": "v09-q-15",
+    "title": "容量规划：训练与推理资源的耦合与隔离",
+    "lede": "默认隔离，按需耦合。训练侧的 SLO 是\"几天内完成\"、推理侧是\"P99 ms 级\"，两者放同一池子会互相伤害。耦合的合理场景：低优先级 batch infer…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 16,
+    "anchor": "v09-q-16",
+    "title": "SLO 反推容量：从 P99 latency 到副本与显存预算",
+    "lede": "给定 SLO（P99 TTFT < X ms、TPOT < Y ms），反推所需 GPU 数与显存配置。流程：（1）测单副本最大并发；（2）算 P99 队列延迟…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 17,
+    "anchor": "v09-q-17",
+    "title": "PyTorch 主版本升级（2.4 → 2.5 → 2.6 → 2.7+）的时机与回滚策略",
+    "lede": "主版本一年滞后 1 个 minor。新版本 release 后留 3–6 个月观察 issue 与上游生态（FlashAttention / vLLM / De…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 18,
+    "anchor": "v09-q-18",
+    "title": "FSDP1 → FSDP2 迁移的决策与时间点",
+    "lede": "FSDP2（2024 上线，2025 稳定）相对 FSDP1 提供更细粒度的 sharding（per-parameter）、更好的 compile 兼容、更清…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 19,
+    "anchor": "v09-q-19",
+    "title": "模型版本冻结：什么时候停止追新模型",
+    "lede": "生产服务的模型版本要冻结 6–12 个月，期间只接受安全 patch 与极小的 tuning。频繁换模型版本带来：（1）客户 prompt regression…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 20,
+    "anchor": "v09-q-20",
+    "title": "自研框架 vs 用开源（PyTorch / Megatron / TorchTitan / DeepSpeed）的边界",
+    "lede": "默认 100% 用开源。自研只在两种情况合理：（1）你的硬件 / 拓扑 / scale 上游不支持；（2）你有明确的 5+ 年差异化需求并能投入 20+ 人年维…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 21,
+    "anchor": "v09-q-21",
+    "title": "训练 / 推理栈的演进路线图：12–24 个月规划怎么写",
+    "lede": "路线图分3 层：硬件层（GPU 代际、网络、存储）、栈层（PyTorch / NCCL / vLLM 等版本）、产品层（模型 SKU、客户能力、SLO）。这三层…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 22,
+    "anchor": "v09-q-22",
+    "title": "ML 平台团队的组织结构与人数配比",
+    "lede": "ML 平台团队 ≈ 5–10% 总 ML 头数（含研究 + 工程）。一个 50 人 ML 组织通常配 3–5 人平台团队；500 人组织 30–50 人。核心…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 23,
+    "anchor": "v09-q-23",
+    "title": "on-call / 值班轮换：ML 平台与传统 SRE 的差异",
+    "lede": "ML 平台 on-call 与传统 SRE 有 3 大差异：（1）训练任务 hang 比 service down 复杂（NCCL / topology / n…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 24,
+    "anchor": "v09-q-24",
+    "title": "ML 代码评审：与传统软件评审的差异点",
+    "lede": "ML 代码评审比传统代码评审多 3 个维度：（1）numerics（精度、数值稳定）；（2）性能（kernel 性能、显存使用）；（3）可复现性（seed、版本…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 25,
+    "anchor": "v09-q-25",
+    "title": "研究团队与工程团队的接口规范",
+    "lede": "接口边界不在代码层，而在\"产物层\"：研究团队交付\"训练好的 checkpoint + 评测报告 + reproducible config\"；工程团队负责\"上…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 26,
+    "anchor": "v09-q-26",
+    "title": "ML 系统能力的工程文化建设：长期 vs 短期的平衡",
+    "lede": "短期看交付，长期看 platform 复利。ML 团队常见反模式：所有人都被产品 deadline 绑架，没有时间投入 platform / tooling /…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 27,
+    "anchor": "v09-q-27",
+    "title": "推理 $/token 的精细成本分解：从原始 $/hour 到客户报价",
+    "lede": "推理 $/output_token = 摊销 GPU $/hour ÷ (吞吐 tok/s × 利用率 × 3600)。但这是裸成本，给客户报价还要叠加：（1）…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 28,
+    "anchor": "v09-q-28",
+    "title": "训练 $/model：单次训练成本核算与摊销",
+    "lede": "训练 $/model = GPU-hour × $/GPU-hour × 工程系数（1.3–1.5×）+ 数据成本 + post-training 成本。202…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 29,
+    "anchor": "v09-q-29",
+    "title": "客户级毛利：从 spend / customer 到 retention 决策",
+    "lede": "客户级毛利 = 客户付费 - 客户实际消耗成本。SaaS 推理产品的客户毛利分布通常是 长尾：top 10% 客户消耗 60%–80% 算力，但毛利可能很低甚至…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 30,
+    "anchor": "v09-q-30",
+    "title": "并发模型与 fleet 经济学：多模型 fleet 的容量与定价",
+    "lede": "fleet 经济学关注\"多模型共池\"下的整体毛利，不是单模型。核心权衡：模型数 ×（容量 + 运维 + 摊销）vs 客户覆盖度。最优 fleet 规模通常 3–…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 31,
+    "anchor": "v09-q-31",
+    "title": "比较题：自建 vs 大公有云 vs 专门 GPU 云 vs 国内云的 2026 选型",
+    "lede": "自建（OEM + colo）单位算力最便宜但前期投入高、运维重；大公有云（AWS/Azure/GCP）产品全栈最成熟、计费灵活但 GPU 价格高且容量紧张；专门…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 32,
+    "anchor": "v09-q-32",
+    "title": "场景题：新成立 AI infra 团队首年路线图（10 人 / 3000 万预算 / 70B 训练 + 推理 SLO）",
+    "lede": "首年路线四阶段：Q1 容量与基础设施（采购 capacity block / 跑通 SLURM / Ray / 可观测栈）；Q2 训练能力（FSDP2 + 70…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 33,
+    "anchor": "v09-q-33",
+    "title": "估算题：ChatGPT-like 产品 1000 万 DAU 的算力账单",
+    "lede": "1000 万 DAU × 10 prompt/天 × (400 prompt + 500 output) tokens = ~9 万亿 tokens/月。70B…"
+  },
+  {
+    "vol": "09-strategy-engineering-decisions",
+    "vol_num": 9,
+    "vol_title": "战略与工程决策",
+    "q": 34,
+    "anchor": "v09-q-34",
+    "title": "设计题：LLM 平台成本治理体系",
+    "lede": "五层架构：1) 遥测（每请求记录 model/version/input/output/cache/region/team）；2) attribution（按…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 1,
+    "anchor": "v10-q-1",
+    "title": "训练中途突发 CUDA OOM，但显存监控显示余量充足：梯度累计显存洪峰复盘",
+    "lede": "某次大规模训练任务在第 3 个 epoch 中段突发 CUDA out of memory 抛错，单 rank 报 Tried to allocate 2.4…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 2,
+    "anchor": "v10-q-2",
+    "title": "长序列训练激活显存爆炸：Selective activation checkpointing 失效复盘",
+    "lede": "某次把训练序列长度从 8K 升到 32K 后，单 rank 反向阶段稳定 OOM。用户已经开了 gradient_checkpointing=True，\"按理说…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 3,
+    "anchor": "v10-q-3",
+    "title": "Adam 优化器状态显存占用翻倍：从 fp32 master 到 8-bit 优化器迁移踩坑",
+    "lede": "某次扩模型从 7B 到 13B 后，加载 checkpoint 阶段就 OOM，连第一个 step 都没跑起来。nvidia-smi 显示加载时显存稳步爬到 8…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 4,
+    "anchor": "v10-q-4",
+    "title": "推理服务 KV cache OOM：长 prompt 突发流量打爆显存",
+    "lede": "某线上推理服务（vLLM 部署 70B 模型）在工作日下午突然进入 5xx 高发期，p99 时延从 800ms 飙到 30s+。日志大量 KV cache ex…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 5,
+    "anchor": "v10-q-5",
+    "title": "PyTorch CUDA allocator 碎片化导致\"明明有 10GB 余量也 OOM\"",
+    "lede": "长跑训练任务（连续运行 24h+）在某个 step 突然 OOM：Tried to allocate 512 MiB but only 8.3 GiB free…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 6,
+    "anchor": "v10-q-6",
+    "title": "NCCL all-reduce hang：256 卡训练突然全卡 idle 复盘",
+    "lede": "某 256 卡（32 节点 × 8 卡）训练任务，运行至第 4 小时全集群 GPU 利用率从 95% 跌到 0%，进程不退出、不报错、不打 log。nvidia…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 7,
+    "anchor": "v10-q-7",
+    "title": "IB 与以太网混用，all-reduce 性能掉 10×：路由误配复盘",
+    "lede": "某新上线的训练集群跑 nccl-tests 基准时，节点内 all-reduce 带宽 480 GB/s 正常，但跨节点（2 节点 × 8 卡）只有 4 GB/…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 8,
+    "anchor": "v10-q-8",
+    "title": "NVLink 拓扑不对称：相同模型同卡数训练吞吐差 30%",
+    "lede": "两台同型号 8×H100 节点跑同一份训练脚本，节点 A 单 step 1.20 s，节点 B 单 step 1.65 s。GPU 型号、CUDA、驱动、NCC…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 9,
+    "anchor": "v10-q-9",
+    "title": "慢节点 straggler：1024 卡训练被 1 个 rank 拖慢 2×",
+    "lede": "1024 卡训练任务，监控显示集群整体吞吐只有理论值的 55%，但每个 rank 的 GPU SM 利用率显示 95%+。step time histogram…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 10,
+    "anchor": "v10-q-10",
+    "title": "NCCL 版本偏差 + 节点镜像漂移，跨节点通信功能错乱",
+    "lede": "训练任务在测试环境（4 节点）跑通，扩到生产 64 节点后，第一个 step 还没完就出 NCCL WARN ncclInternalError + peer…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 11,
+    "anchor": "v10-q-11",
+    "title": "Checkpoint 静默损坏：恢复训练发现 loss 飞涨追溯文件 corruption",
+    "lede": "某次训练任务因节点故障重启，从最近一次 checkpoint（保存在 Lustre）恢复后，loss 从恢复前的 1.8 突然跳到 12+，几个 step 内变…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 12,
+    "anchor": "v10-q-12",
+    "title": "Checkpoint 恢复耗时 1 小时：单 rank 串行加载 + 跨 NUMA 拷贝复盘",
+    "lede": "某 175B 模型训练，每次因节点故障重启加载 checkpoint 耗时近 60 分钟，期间 GPU 全闲。一周内累计因 reload 浪费 ~10% 算力。…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 13,
+    "anchor": "v10-q-13",
+    "title": "S3 限速触发 SlowDown：分布式 checkpoint 上传雪崩",
+    "lede": "某次训练把 ckpt 同步上传 S3 作为长期归档，1024 rank 同时发起 multipart upload 后，AWS 返回大量 503 SlowDow…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 14,
+    "anchor": "v10-q-14",
+    "title": "Lustre 配额耗尽，训练任务静默写入失败",
+    "lede": "某项目共享 Lustre 目录配额 50 TB，多个训练任务并发写 ckpt + log。某天凌晨配额满，新写入返回 EDQUOT，但训练框架未把 IO 错误当…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 15,
+    "anchor": "v10-q-15",
+    "title": "异步 checkpoint 与下一 step 竞态：FSDP2 async save 部分 shard 是旧版",
+    "lede": "某 FSDP2 训练任务开了 async_save=True，原本期望保存与计算重叠隐藏 IO 时延。运行几天后偶发出现\"恢复后 loss 跳变 + 慢慢恢复\"…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 16,
+    "anchor": "v10-q-16",
+    "title": "vLLM continuous batching 死锁：waiting queue 堆积但 running queue 不前进",
+    "lede": "某线上 vLLM 推理服务突发 hang：所有新请求进入 waiting 状态后不再前进，已有 running 请求也不出 token，但服务进程不挂、heal…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 17,
+    "anchor": "v10-q-17",
+    "title": "推理服务 KV cache 内存泄漏：长跑后 OOM 与 cache hit rate 下滑",
+    "lede": "推理服务部署 7 天后开始周期性 OOM 重启，每次重启间隔从初期 24h 缩短到 6h。vllm:gpu_cache_usage 长期居高不下，prefix…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 18,
+    "anchor": "v10-q-18",
+    "title": "推理请求超时雪崩：上游重试放大流量 3× 击穿后端",
+    "lede": "某长 prompt 客户端请求 p99 时延突破 30 s 客户端超时，client 自动重试。3 分钟内后端 QPS 从 1× 涨到 3×，所有请求开始排队，…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 19,
+    "anchor": "v10-q-19",
+    "title": "FP8 量化推理数值漂移：上线后某些任务准确率掉 5%",
+    "lede": "某模型从 BF16 量化到 FP8 (E4M3) 推理上线，整体 throughput 提升 1.8×，BLEU / MMLU 整体打分下降 0.3 pp 在可…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 20,
+    "anchor": "v10-q-20",
+    "title": "Autoscaler 抖动：流量小波动触发扩缩容震荡",
+    "lede": "推理服务接 K8s HPA 按 GPU utilization 自动扩缩容。流量平稳时实例数应该稳定在 8 个，但实际监控显示在 6–12 之间频繁震荡，每 1…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 21,
+    "anchor": "v10-q-21",
+    "title": "Spot 抢占雪崩：高优任务突发挤掉 100 个低优任务连锁失败",
+    "lede": "某共享 ML 平台同时跑训练（低优 spot）与推理（高优 reserved）。某次推理流量突发触发集群扩容，调度器为腾资源批量 preempt 低优任务。10…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 22,
+    "anchor": "v10-q-22",
+    "title": "误发 SIGTERM 致整集群训练任务连锁退出：cleanup script bug 复盘",
+    "lede": "某周末凌晨，平台运维提交一个看似无害的 cleanup PR：定期清理 /tmp 下过期文件。脚本通过 systemd timer 在每节点跑。脚本里 pkil…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 23,
+    "anchor": "v10-q-23",
+    "title": "SLURM queue 饥饿：长任务永远排不上，运维不察觉",
+    "lede": "某 SLURM 集群设有 short / long / priority 三个 partition，研究人员反馈提交 64 卡 7 天的训练任务在 long 队…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 24,
+    "anchor": "v10-q-24",
+    "title": "GPU 资源声明不匹配：作业拿到 4 卡却只能用 2 卡",
+    "lede": "某用户 SLURM 提交脚本写 --gres=gpu:4，启动后训练 launcher 只检测到 2 张 GPU，训练 hang 在 NCCL 初始化（rank…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 25,
+    "anchor": "v10-q-25",
+    "title": "节点失联检测延迟：30 分钟才发现节点死机训练全程在等",
+    "lede": "某 256 卡训练任务，某节点凌晨 3 点死机（kernel panic），整任务挂在 NCCL collective 等这个 rank。但调度器健康检查间隔…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 26,
+    "anchor": "v10-q-26",
+    "title": "比较：训练 NaN、通信 hang、推理 OOM 三类典型事故的定位路径与防御策略",
+    "lede": "三类事故的报警信号差异巨大： - 训练 NaN：loss 突然变 NaN / Inf，grad norm 飙升，监控曲线断崖式或台阶式跳变；rank 之间可能不…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 27,
+    "anchor": "v10-q-27",
+    "title": "场景：周五下午 5 点推理服务 P99 飙升 + region 5xx，30 分钟决策路径",
+    "lede": "oncall 收到告警：推理服务 P99 时延从 800 ms 飙到 12 s，us-west region 5xx 占比 8%（其它 region 正常），客…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 28,
+    "anchor": "v10-q-28",
+    "title": "估算：万卡训练集群在 5% 年故障率下，端到端有效训练时间占比",
+    "lede": "某万卡集群（10000 个 GPU，按 8 卡/节点算 1250 个节点）跑一个 30 天训练任务。已知：单节点年故障率 5%，checkpoint 间隔 30…"
+  },
+  {
+    "vol": "10-postmortems-and-lessons",
+    "vol_num": 10,
+    "vol_title": "事故复盘与故障教训",
+    "q": 29,
+    "anchor": "v10-q-29",
+    "title": "设计：100 人规模 ML 团队的事故复盘机制",
+    "lede": "100 人 ML 团队（含训练、推理、平台、研究），每月 incident 数预计 20–40 次（含 P0/P1/P2 分级），需要一套机制： - 事件触发后…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 1,
+    "anchor": "v11-q-1",
+    "title": "RLHF / RL 后训练的 infra 形态有哪些？rollout 与 train 共置还是解耦怎么选？",
+    "lede": "现代 RL 后训练（PPO、GRPO、Reinforce++ 等）由三段循环组成：actor 用当前策略 rollout 生成轨迹、critic / rewar…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 2,
+    "anchor": "v11-q-2",
+    "title": "GRPO 与 PPO 在工程实现上有什么差异？怎么影响 infra 设计？",
+    "lede": "GRPO（Group Relative Policy Optimization）是 DeepSeek 在 DeepSeekMath / R1 中推开的 RL 算…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 3,
+    "anchor": "v11-q-3",
+    "title": "RLVR（可验证奖励）相比 RLHF 在 infra 上简化了什么？还需要哪些新组件？",
+    "lede": "RLVR（Reinforcement Learning with Verifiable Rewards，DeepSeek-R1 / Kimi K1.5 / o1…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 4,
+    "anchor": "v11-q-4",
+    "title": "PPO/GRPO 的权重同步通道有哪几种？怎么权衡？",
+    "lede": "解耦 RL 训练里 actor 权重要持续从 train pool 同步到 rollout pool。常见通道按速度排序：NVSwitch / NVLink 内…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 5,
+    "anchor": "v11-q-5",
+    "title": "RL 后训练的 long-CoT rollout 怎么调度？为什么这么吃显存？",
+    "lede": "Long-CoT（思维链）rollout 是 R1 / o1 类 RL 后训练独有的负载：单条样本生成 4k–32k token，KV cache 占用线性增长…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 6,
+    "anchor": "v11-q-6",
+    "title": "MoE 推理的专家并行（EP）是什么？跟 TP 怎么组合？",
+    "lede": "专家并行（Expert Parallelism, EP）把 MoE 模型里的众多 expert FFN 切分到不同 GPU：每张卡只持有一部分 expert，t…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 7,
+    "anchor": "v11-q-7",
+    "title": "MoE 训练里 expert load balancing 是怎么做的？为什么 router collapse 是个 infra 问题？",
+    "lede": "MoE 训练有个天然的退化倾向：router 学到把绝大多数 token 都送到少数几个 expert，其他 expert 缺训练信号变成\"死 expert\"。…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 8,
+    "anchor": "v11-q-8",
+    "title": "Context Parallelism (CP) 是什么？跟 Ring Attention、Sequence Parallelism 怎么区分？",
+    "lede": "Context Parallelism (CP) 是沿 sequence 维度把单条样本切到多张卡的并行方式，让每张卡只处理一部分 token 的 forwar…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 9,
+    "anchor": "v11-q-9",
+    "title": "KV cache 量化（INT8 / FP8 / INT4）是怎么做的？工程坑在哪？",
+    "lede": "KV cache 量化是把推理时缓存的 K/V 张量用 INT8 / FP8 / INT4 存储，显存压一半到 1/4。技术核心：1) per-head 或 p…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 10,
+    "anchor": "v11-q-10",
+    "title": "Disaggregated prefill/decode 是什么？为什么 Mooncake / DeepSeek 在生产里用它？",
+    "lede": "Disaggregated prefill/decode 把 LLM 推理的两个阶段拆到不同 GPU 池：prefill pool（高算力卡，处理长 promp…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 11,
+    "anchor": "v11-q-11",
+    "title": "投机解码（speculative decoding）有哪几类方案？Medusa、EAGLE、Lookahead 各自工程取舍？",
+    "lede": "投机解码（speculative decoding）核心思想：用一个小且快的 draft model 一次生成 N 个 candidate token，主模型一…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 12,
+    "anchor": "v11-q-12",
+    "title": "Blackwell B200 与 Hopper H100/H200 在训练 / 推理 infra 上的差异是什么？",
+    "lede": "Blackwell (B200/GB200) 相对 Hopper (H100/H200) 的核心升级：1) FP4（MXFP4 / NVFP4）tensor c…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 13,
+    "anchor": "v11-q-13",
+    "title": "NVL72 vs NVL8 对模型并行策略的影响是什么？",
+    "lede": "NVL72 单域 72 卡全 NVLink 互连，对模型并行的影响：1) 大模型可以\"塞进单域\"——70B 用 NVL72 内 8-way TP + 9-way…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 14,
+    "anchor": "v11-q-14",
+    "title": "FP4 训练需要哪些数值技巧？为什么不是简单的\"把 FP8 量化代码改成 FP4\"？",
+    "lede": "FP4 训练有效需要：1) microscaling（每 32 或 16 元素一组 scale，让 outlier 不污染整 block）；2) per-ten…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 15,
+    "anchor": "v11-q-15",
+    "title": "长上下文（1M+）训练的工程瓶颈有哪些？",
+    "lede": "长上下文（>128k token）训练的主要瓶颈：1) attention O(N²) 计算与显存（FA-2/3 + CP 解决）；2) activation…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 16,
+    "anchor": "v11-q-16",
+    "title": "RAG vs long-context vs prompt caching 的 infra 权衡是什么？",
+    "lede": "三种处理超长上下文的范式：1) long-context：把全文塞 prompt，模型直接处理。优点是模型能跨段推理，缺点是 prefill cost 高、KV…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 17,
+    "anchor": "v11-q-17",
+    "title": "Agent infra 与 stateless LLM serving 的差异是什么？",
+    "lede": "Agent serving 与传统 stateless LLM serving 的关键差异：1) 多步 tool 调用：每步的 LLM 输出作为 tool in…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 18,
+    "anchor": "v11-q-18",
+    "title": "推理引擎的\"调度器演进\"经历了哪几代？vLLM v0/v1、SGLang、TRT-LLM 现在各自架构什么样？",
+    "lede": "推理引擎的调度器演进大致五代：1) static batching（batch 内同进同出，HuggingFace TGI 早期）；2) continuous…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 19,
+    "anchor": "v11-q-19",
+    "title": "KV cache offload (到 CPU / SSD / 跨节点) 什么时候值得？",
+    "lede": "KV cache offload 把不活跃的 KV 从 GPU HBM 搬到 CPU 内存、SSD、甚至其他节点的 HBM。常见层级：GPU HBM > 跨 G…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 20,
+    "anchor": "v11-q-20",
+    "title": "Multi-modal LLM serving 与纯文本 LLM serving 的 infra 差异是什么？",
+    "lede": "Multi-modal LLM（如 GPT-4V、Gemini、Claude 3、Llama 3.2 Vision）serving 与纯文本的差异：1) vis…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 21,
+    "anchor": "v11-q-21",
+    "title": "对比题：PPO vs GRPO vs DPO 在 infra 形态、数据需求、收敛性上的取舍",
+    "lede": "PPO 是经典 RL，需要 actor + critic + reference + reward 四份模型 + rollout 引擎 + RL 训练框架。GR…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 22,
+    "anchor": "v11-q-22",
+    "title": "场景题：8 张 H200 + 70B Llama + 32k 上下文 + SLO TTFT<500ms TPOT<50ms，怎么部署？",
+    "lede": "推荐部署：vLLM v1，TP=8 单实例占满 8 张 H200（141GB 显存），enable_chunked_prefill=True，enable_pr…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 23,
+    "anchor": "v11-q-23",
+    "title": "MLA (Multi-head Latent Attention) 数学与实现深度",
+    "lede": "MLA (Multi-head Latent Attention) 是 DeepSeek-V2/V3 引入的 KV cache 压缩技术。核心：把 K/V 通过…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 24,
+    "anchor": "v11-q-24",
+    "title": "Mamba / SSM 状态空间模型与混合架构",
+    "lede": "Mamba 是 2023 提出的状态空间模型（State Space Model, SSM）替代 Transformer attention：（1）Linear…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 25,
+    "anchor": "v11-q-25",
+    "title": "长上下文 1M+ 训练与推理实战",
+    "lede": "1M+ context 长上下文 LLM 实战：（1）架构选择：MLA / GQA 必备（KV 压缩）+ optional Mamba hybrid（更长 co…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 26,
+    "anchor": "v11-q-26",
+    "title": "RLVR (Reinforcement Learning with Verifiable Rewards) 工程实战",
+    "lede": "RLVR 范式：用规则可验证奖励（代码跑通 / 数学答对 / 形式验证 pass）替代 reward model。代表系统：DeepSeek-R1 (math/…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 27,
+    "anchor": "v11-q-27",
+    "title": "Speculative Decoding 在 2026 的演进：EAGLE-3 / Lookahead 2.0",
+    "lede": "2026 投机解码新方案：（1）EAGLE-3：在 EAGLE-2 基础上加 dynamic adaptive tree（按 prompt 难度调整 tree…"
+  },
+  {
+    "vol": "11-posttraining-new-inference",
+    "vol_num": 11,
+    "vol_title": "后训练与新一代推理范式卷",
+    "q": 28,
+    "anchor": "v11-q-28",
+    "title": "KV Cache 量化算法 2026 演进（KIVI / QServe / SnapKV）",
+    "lede": "KV cache 量化 2025-2026 主流方案：（1）KIVI (Per-channel + Per-token quant for K, Per-tok…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 1,
+    "anchor": "v12-q-1",
+    "title": "Diffusion 模型推理流水的整体结构是什么？跟训练流水有什么差别？",
+    "lede": "Diffusion 模型推理流水分三大段：（1）text encoder 把 prompt 编码为 condition embedding；（2）diffusi…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 2,
+    "anchor": "v12-q-2",
+    "title": "SDXL / Flux / SD3 三大主流图像生成模型架构对比",
+    "lede": "SDXL（2023）是 UNet 架构 + CLIP + OpenCLIP 双 text encoder + 4 通道 VAE，参数 2.6B（base）+ 6…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 3,
+    "anchor": "v12-q-3",
+    "title": "DiT (Diffusion Transformer) 跟传统 UNet 的本质差异",
+    "lede": "DiT 把 diffusion 模型主体从 UNet（CNN + attention 混合）改成纯 Transformer。优势：跟 LLM 同构的 scali…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 4,
+    "anchor": "v12-q-4",
+    "title": "diffusers 库的核心抽象（Pipeline / Scheduler / ModelMixin）",
+    "lede": "diffusers 是 HuggingFace 维护的事实标准 diffusion 库，三层核心抽象：Pipeline（端到端封装，用户接口）、Schedule…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 5,
+    "anchor": "v12-q-5",
+    "title": "DDIM / DPM-Solver / Euler / LCM 采样器对比与工程选择",
+    "lede": "四类主流采样器：DDIM（确定性 ODE，50 步基线，质量好但慢）；DPM-Solver / DPM-Solver++（多步 ODE solver，20 步达…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 6,
+    "anchor": "v12-q-6",
+    "title": "DeepCache 加速原理与适用场景",
+    "lede": "DeepCache 是 2023 提出的免训练 diffusion 加速技术，核心观察：UNet 中间和深层特征在相邻 step 之间变化很小，可以跨 step…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 7,
+    "anchor": "v12-q-7",
+    "title": "Flash Diffusion / LCM-LoRA / Hyper-SD 等少步采样技术",
+    "lede": "少步采样技术通过蒸馏让 diffusion 模型在极少步数（1-8 步）下出图。三大主流方案：LCM/LCM-LoRA（Latent Consistency M…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 8,
+    "anchor": "v12-q-8",
+    "title": "SVDQuant / SmoothQuant / Q-Diffusion 等 FP4/INT8 量化方案",
+    "lede": "AIGC 模型量化主要做两件事：weight 量化（INT8/FP8/INT4/FP4）减显存；activation 量化（INT8/FP8）减计算。三类主流方…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 9,
+    "anchor": "v12-q-9",
+    "title": "ControlNet 推理时集成与多 ControlNet 组合",
+    "lede": "ControlNet 在 base Unet 旁边复制一个\"控制分支\"（跟 base Unet 同架构但权重独立），接收 conditioning image（…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 10,
+    "anchor": "v12-q-10",
+    "title": "LoRA 动态加载与多 LoRA 切换的工程实践",
+    "lede": "LoRA 是给 base 模型加 low-rank adaptation 的轻量 fine-tune（每个 LoRA 几 MB-几十 MB），AIGC 生态里几…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 11,
+    "anchor": "v12-q-11",
+    "title": "IPAdapter 多条件融合机制与推理开销",
+    "lede": "IPAdapter（Image Prompt Adapter）让 diffusion 模型接受图像作为额外 prompt（除文本外）。架构上是给 cross-a…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 12,
+    "anchor": "v12-q-12",
+    "title": "ComfyUI workflow 引擎与节点编排原理",
+    "lede": "ComfyUI 是基于 Python 后端 + Web 前端的 diffusion 模型 workflow 编排工具。核心是 dataflow graph 执行…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 13,
+    "anchor": "v12-q-13",
+    "title": "VAE encoder/decoder 加速（TAESD / tiny VAE / 分块解码）",
+    "lede": "VAE 在 diffusion 推理只跑一次（latent → image 解码，或 image → latent 编码 if img2img），不像 Unet…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 14,
+    "anchor": "v12-q-14",
+    "title": "Text encoder 优化（CLIP + T5-XXL 的双 encoder 推理）",
+    "lede": "SDXL 用 CLIP-L + OpenCLIP-G（合计 ~820M），text encode 耗时几十毫秒、显存 ~2GB。Flux 用 CLIP-L +…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 15,
+    "anchor": "v12-q-15",
+    "title": "SDXL 服务化吞吐 vs 时延权衡（batch size / step 数 / resolution）",
+    "lede": "SDXL 服务化的核心 trade-off：增大 batch 提吞吐但增 latency 和显存；减 step 数减 latency 但损质量；降分辨率减时间但…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 16,
+    "anchor": "v12-q-16",
+    "title": "多并发图像生成 batch 调度与显存预算",
+    "lede": "AIGC fleet 调度跟 LLM serving 根本不同：（1）没有 KV cache 概念（diffusion 是 multi-step iterati…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 17,
+    "anchor": "v12-q-17",
+    "title": "Sora 风格视频生成 infra 总览",
+    "lede": "Sora 风格视频生成基于 Video DiT（spatiotemporal Transformer），输入文本（+ 可选首帧 / 参考视频）输出 latent…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 18,
+    "anchor": "v12-q-18",
+    "title": "视频生成的 latent video 表示与压缩",
+    "lede": "Latent video 表示是视频生成 infra 的基石：用 3D VAE 把视频压缩到 latent 空间（spatial 8× + temporal 4…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 19,
+    "anchor": "v12-q-19",
+    "title": "Video DiT 的 spatial-temporal attention 优化",
+    "lede": "Video DiT 的 attention 是工程最大挑战：sequence 长度 = T × H × W / patch_size³，10s 720p 视频…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 20,
+    "anchor": "v12-q-20",
+    "title": "视频生成 fleet 的存储 / 传输 / CDN 挑战",
+    "lede": "视频生成 fleet 的存储 / 传输挑战远超图像：（1）单视频体积 50-500MB（vs 图像 1-5MB），存储成本爆炸；（2）生成耗时长（30-180s…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 21,
+    "anchor": "v12-q-21",
+    "title": "AIGC 业务 SLO 设计（生成质量 + 时延双维度）",
+    "lede": "AIGC 业务 SLO 比 LLM 多一维：除了 latency（TTFI、total time），还要刻画生成质量（CLIP-Score、用户满意度、客诉率）…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 22,
+    "anchor": "v12-q-22",
+    "title": "图像生成 vs LLM 文本推理工程差异",
+    "lede": "图像生成 vs LLM 推理在工程上有 7 大根本差异：（1）执行模式：multi-step iterative vs autoregressive；（2）状态…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 23,
+    "anchor": "v12-q-23",
+    "title": "多模态联合推理架构（图 + 文 + 音）",
+    "lede": "多模态联合推理（Vision-Language Models, VLM / Audio-Language Models, ALM）的工程模式：（1）独立 enc…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 24,
+    "anchor": "v12-q-24",
+    "title": "AIGC 内容审核与水印（NSFW 过滤 / digital watermark）",
+    "lede": "AIGC 内容审核分两阶段：（1）prompt 阶段过滤（拒绝违规 prompt）；（2）输出阶段过滤（生成后用 NSFW classifier 拦截）。Wat…"
+  },
+  {
+    "vol": "12-aigc-generation-infra",
+    "vol_num": 12,
+    "vol_title": "AIGC 生成式 infra 卷",
+    "q": 25,
+    "anchor": "v12-q-25",
+    "title": "AIGC 单图 / 单视频成本核算与 fleet 容量规划",
+    "lede": "AIGC 成本核算单位：图像 $/img、视频 $/video（不像 LLM 是 $/token）。典型数据：SDXL 1024 25 step 在 H100…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 1,
+    "anchor": "v13-q-1",
+    "title": "推荐系统推理跟 LLM 推理 / 图像生成推理在工程模式上的本质差异是什么？",
+    "lede": "推荐系统推理的工程特点：（1）embedding lookup 主导，DLRM 类模型 90% 时间在查 embedding 表、不在算 matmul；（2）l…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 2,
+    "anchor": "v13-q-2",
+    "title": "DLRM 模型架构与推理瓶颈",
+    "lede": "DLRM (Deep Learning Recommendation Model, Meta 2019) 是工业推荐系统的代表架构。结构：（1）sparse f…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 3,
+    "anchor": "v13-q-3",
+    "title": "大规模 Embedding 表的分布式存储与查询",
+    "lede": "大规模 embedding 表的分布式存储与查询方案：（1）全量复制：每个推理实例本地一份完整表，最快但内存浪费；（2）hash sharding：按 hash…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 4,
+    "anchor": "v13-q-4",
+    "title": "推荐系统两阶段流水：候选生成 vs 精排",
+    "lede": "推荐系统在线服务通常分三阶段：（1）候选生成 / Retrieval / Recall：从亿级 item pool 召回几千到几万候选，强调速度（10ms 内）…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 5,
+    "anchor": "v13-q-5",
+    "title": "双塔模型 + ANN 检索的候选生成方案",
+    "lede": "双塔模型 (Two-Tower) 把 user 和 item 各自映射到同一 embedding 空间，相似度用内积或 cosine。训练时正样本（用户点击的…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 6,
+    "anchor": "v13-q-6",
+    "title": "生成式推荐 (GR) 范式：从 DLRM 到 HSTU / TIGER",
+    "lede": "生成式推荐 (Generative Recommendation, GR) 把用户行为序列当作 prompt，用 Transformer 模型生成下一个或下几个…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 7,
+    "anchor": "v13-q-7",
+    "title": "vLLM-GR 思路：把 LLM 推理框架适配推荐",
+    "lede": "vLLM-GR 是把 vLLM 推理引擎适配生成式推荐模型 (GR) 的工程实践。核心思路：GR 模型本质是 Transformer + autoregress…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 8,
+    "anchor": "v13-q-8",
+    "title": "序列推荐模型（SASRec / BERT4Rec）与 KV cache 形态",
+    "lede": "序列推荐 (Sequential Recommendation) 用 transformer 建模用户历史行为序列，预测下一个交互 item。代表模型：（1）S…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 9,
+    "anchor": "v13-q-9",
+    "title": "推荐 P99 latency 工程：信息流场景 50ms 怎么达到",
+    "lede": "信息流推荐 P99 50ms 是工业标杆。延迟预算分配：（1）网络 + 序列化 5-10ms（client → 接入层 → 推荐服务）；（2）feature s…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 10,
+    "anchor": "v13-q-10",
+    "title": "多目标建模与推理融合（CTR / CVR / 时长 等多 head）",
+    "lede": "推荐系统需同时优化多个业务目标：CTR（点击率）/ CVR（转化率）/ 时长（dwell time）/ 完播率（视频）/ 互动率（点赞评论）/ 留存（次日打开）…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 11,
+    "anchor": "v13-q-11",
+    "title": "实时特征 vs 离线特征：Feature Store 设计",
+    "lede": "推荐 Feature Store 是给推理服务提供 features 的子系统，按时效性分：（1）离线特征：T+1 计算（昨天行为的统计），从 Hive/Spa…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 12,
+    "anchor": "v13-q-12",
+    "title": "推荐系统 fleet 调度与容量规划",
+    "lede": "推荐系统 fleet 容量规划核心：（1）按 peak QPS × P99 latency / 70% utilization buffer 算实例数；（2）多…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 13,
+    "anchor": "v13-q-13",
+    "title": "A/B 测试 infra 与在线评估",
+    "lede": "推荐 A/B 测试 infra 包括：（1）分流系统：按 user / device / region 等维度把 traffic 分到不同 experiment…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 14,
+    "anchor": "v13-q-14",
+    "title": "推荐冷启动：新用户 / 新物品 / 新业务",
+    "lede": "推荐冷启动分三种：（1）新用户冷启动：刚注册 user 没行为；（2）新物品冷启动：刚上线 item 没曝光；（3）新业务冷启动：新场景没历史数据。常用策略：基…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 15,
+    "anchor": "v13-q-15",
+    "title": "推荐推理服务架构：单体 vs 微服务",
+    "lede": "推荐推理服务架构演进：（1）单体架构：所有逻辑（feature / 召回 / 精排 / 重排）在一个进程，简单但难 scale 和迭代；（2）模型即服务：每个模…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 16,
+    "anchor": "v13-q-16",
+    "title": "推荐系统跟广告 / 搜索的工程相似与差异",
+    "lede": "推荐 / 广告 / 搜索系统在 infra 上高度相似（80%+ 共享：feature store / 多阶段 ranking / A/B 测试 / fleet…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 17,
+    "anchor": "v13-q-17",
+    "title": "推荐 / LLM / 图像生成三大推理范式对照",
+    "lede": "推荐 / LLM / 图像生成是三种根本不同的推理范式：（1）推荐 (DLRM/GR)：embedding lookup + ranking，IO bound，…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 18,
+    "anchor": "v13-q-18",
+    "title": "比较题：DLRM vs HSTU vs TIGER 三大推荐架构",
+    "lede": "DLRM / HSTU / TIGER 代表三种推荐架构范式：DLRM 是 sparse features + MLP，工业最成熟；HSTU 是 Transfo…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 19,
+    "anchor": "v13-q-19",
+    "title": "场景题：从 0 设计一个新闻推荐系统的推理服务",
+    "lede": "1000 万 DAU 信息流新闻推荐系统设计：（1）Fleet 容量：peak QPS ~10 万（每 user 10 req/min × 0.01 同时在线）…"
+  },
+  {
+    "vol": "13-recommendation-inference",
+    "vol_num": 13,
+    "vol_title": "推荐系统推理 infra 卷",
+    "q": 20,
+    "anchor": "v13-q-20",
+    "title": "估算题：推荐 fleet 单 request 成本核算",
+    "lede": "推荐 fleet 单 request 成本核算公式：(fleet GPU/CPU 成本 + feature service 成本 + storage + net…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 1,
+    "anchor": "v14-q-1",
+    "title": "国产 AI 芯片生态 2025-2026 总览",
+    "lede": "2025-2026 国产 AI 芯片生态主要玩家：（1）华为昇腾 (Ascend)：910B/910C 训练 + 310 推理，CANN 软件栈，公开度最高生态…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 2,
+    "anchor": "v14-q-2",
+    "title": "华为昇腾 910B/910C 微架构详解",
+    "lede": "昇腾 910B（达芬奇架构）和 910C（达芬奇 v2）的核心特征：（1）Cube unit：专门矩阵乘累加单元，类似 NV Tensor Core，跑 FP1…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 3,
+    "anchor": "v14-q-3",
+    "title": "Ascend C 编程模型与 CUDA 的对比",
+    "lede": "Ascend C 是华为基于 C++ 模板 + DSL 开发的昇腾 NPU 编程语言。核心特征：（1）SIMD 而非 SIMT：Vector unit 一次处理…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 4,
+    "anchor": "v14-q-4",
+    "title": "CANN 软件栈与 PyTorch 适配（torch_npu）",
+    "lede": "CANN（Compute Architecture for Neural Networks）是华为昇腾的核心软件栈，类比 NV CUDA + cuDNN + N…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 5,
+    "anchor": "v14-q-5",
+    "title": "vLLM / SGLang 在昇腾上的适配",
+    "lede": "vLLM 在昇腾上的适配是大工程：（1）PagedAttention kernel 需要昇腾 Ascend C 实现（NV CUDA 版本不能直接用）；（2）K…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 6,
+    "anchor": "v14-q-6",
+    "title": "寒武纪 MLU 架构与编程",
+    "lede": "寒武纪 MLU (Machine Learning Unit) 系列：思元 290 / 370 推理 + 590 训练，采用 DSA 架构（专门为深度学习设计的…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 7,
+    "anchor": "v14-q-7",
+    "title": "AMD MI300X 微架构与 ROCm 软件栈",
+    "lede": "AMD MI300X 是 AMD Instinct 系列 2024 主力 AI 加速器：（1）算力：FP16 ~1300 TFLOPs，跟 H100 接近；（2…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 8,
+    "anchor": "v14-q-8",
+    "title": "Apple Silicon ANE / MLX 与端侧推理",
+    "lede": "Apple Silicon (M1/M2/M3/M4 系列) 跑 AI 的核心组件：（1）ANE (Apple Neural Engine)：专用 NPU，~3…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 9,
+    "anchor": "v14-q-9",
+    "title": "MLIR / IREE / TVM 在国产芯片上的应用",
+    "lede": "跨芯片编译栈是国产芯片生态共同关注方向：（1）MLIR (Multi-Level Intermediate Representation)：LLVM 系新一代…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 10,
+    "anchor": "v14-q-10",
+    "title": "跨平台量化与算子覆盖",
+    "lede": "跨平台量化部署的核心挑战：（1）量化算法相同（GPTQ/AWQ/SmoothQuant），但 kernel 实现各家不同；（2）INT8 / FP16 / BF…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 11,
+    "anchor": "v14-q-11",
+    "title": "摩尔线程 MTT 与沐曦 MXC 概览",
+    "lede": "摩尔线程 (Moore Threads) MTT 系列：MTT S5000 / S4000 是主力，FP16 ~190-256 TFLOPs，MUSA SDK…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 12,
+    "anchor": "v14-q-12",
+    "title": "跨平台 PyTorch fleet：从一份代码到多 backend 部署",
+    "lede": "跨平台 PyTorch fleet 部署的核心策略：（1）统一 PyTorch model 代码：model 定义层完全统一，靠 PyTorch 各 backe…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 13,
+    "anchor": "v14-q-13",
+    "title": "国产芯片生产部署的真实经验",
+    "lede": "国产芯片生产部署的真实挑战：（1）firmware / driver 稳定性：升级频繁，跟硬件 / 软件版本耦合，故障率高于 NV；（2）节点故障率：硬件故障率…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 14,
+    "anchor": "v14-q-14",
+    "title": "信创替代：从 NV fleet 切到国产 fleet 的工程",
+    "lede": "NV fleet → 国产 fleet 迁移工程包括：（1）模型适配：PyTorch 代码 + 量化 model 跨平台测试；（2）性能 benchmark：每…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 15,
+    "anchor": "v14-q-15",
+    "title": "NV / 昇腾 / MI300X / Apple Silicon 横向对照",
+    "lede": "四家主流 AI 计算平台横向对比维度：算力（FP16 TFLOPs）/ 显存（HBM GB）/ 带宽（TB/s）/ 软件栈成熟度 / 模型生态 / 价格 / 典…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 16,
+    "anchor": "v14-q-16",
+    "title": "比较题：昇腾 vs 寒武纪 vs 摩尔线程",
+    "lede": "三家国产芯片代表三条不同路线： - 昇腾 (NPU / 达芬奇)：自研 NPU 微架构 + Ascend C DSL，CANN 软件栈最成熟，国产生态龙头 -…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 17,
+    "anchor": "v14-q-17",
+    "title": "场景题：从 0 设计一个国产芯片 LLM 推理平台",
+    "lede": "70B LLM 推理服务从 NV 切到昇腾 fleet 的 quarter-level 设计：（1）Month 1: 评估 + PoC：在 4-8 卡昇腾 91…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 18,
+    "anchor": "v14-q-18",
+    "title": "估算题：国产 fleet vs NV fleet 的 TCO 对比",
+    "lede": "70B LLM 服务 TCO 对比（100 万 DAU 信息流 AI 助手场景）：（1）Hardware cost：国产 60-70% of NV；（2）Sof…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 19,
+    "anchor": "v14-q-19",
+    "title": "跨芯片量化与精度对齐挑战",
+    "lede": "跨芯片量化精度对齐挑战：（1）算法层一致（GPTQ/AWQ/SmoothQuant 等是 hardware-agnostic），但 kernel 实现差异 导致…"
+  },
+  {
+    "vol": "14-domestic-chips-heterogeneous",
+    "vol_num": 14,
+    "vol_title": "国产芯片与异构推理卷",
+    "q": 20,
+    "anchor": "v14-q-20",
+    "title": "设计题：从 0 设计跨平台 AI infra 平台",
+    "lede": "跨平台 AI infra 平台从 day 1 设计要点：（1）统一抽象层：模型代码 / inference engine / serving API 都 har…"
+  }
+]

@@ -1,0 +1,1183 @@
+# 编译器与 IR
+
+## 主题边界
+本卷聚焦深度学习编译栈的通用主题，覆盖编译器、多层 IR（HLO / MLIR）、TVM、TorchInductor、ONNX Runtime、TensorRT 等部署/编译运行时中的典型机制，以及与之相关的图优化、自动调度、量化/稀疏、新硬件后端接入、AOT/JIT 与控制流编译等问题。分布式训练策略、平台治理话题不在本卷展开；偏 CUDA kernel 实现、Triton 编程和自定义算子工程细节则放在独立的 CUDA / Triton / custom-ops 卷中。XLA 虽源自 Google，但已被 JAX、PyTorch/XLA 等多家前端共享，因此在本卷以通用 GPU/TPU 编译器视角讨论。
+
+## Q1. XLA 的 HLO IR 长什么样？如何阅读 XLA 的编译日志？
+
+> 🟡 进阶 · 当模型在 XLA 上跑得不如预期，profiler 只能告诉你哪个 kernel 慢，HLO 才能告诉你“为什么编译器做了或没做这件事”。看不懂 HLO，就只能猜 `fusion` 有没有发生、`copy` 是从哪冒出来的。
+
+### 1. 核心结论
+HLO 是 XLA 在前端图和后端代码生成之间的核心中间表示，用来描述张量形状、算子依赖、布局信息以及高层优化后的计算结构。它既不像前端框架的 Python API 那样面向用户，也不像 LLVM IR/PTX 那样足够接近机器，而是处在“便于跨框架、跨后端做图优化”的抽象层；JAX、PyTorch/XLA 等多家前端都把自己的图表示 lower 到同一份 HLO 之上。
+
+阅读 HLO 的重点不是逐字符背语法，而是抓住四件事：模块和入口计算长什么样、每个值的 shape/dtype/layout 如何标注、哪些节点已经被 fusion/constant folding/cse 改写、日志里当前看到的是哪一个编译阶段。会看 HLO 和 dump 日志，才能判断性能问题到底发生在前端聚类、HLO 优化、buffer assignment，还是后端代码生成。
+
+### 2. 底层原理
+XLA 的典型链路是：前端框架（JAX `jit`、PyTorch/XLA、或其他基于 XLA 的图入口）把一段计算 lowering 成 HLO Module；随后 HLO 经过机器无关优化 pass，如常量折叠、代数化简、公共子表达式消除、算子融合、布局传播；再进入后端相关阶段，生成更低层的 thunk/LLVM IR/PTX 或 TPU 可执行表示。HLO 因此承担了“统一优化载体”的角色。
+
+在文本形式上，HLO 往往由一个 `HloModule` 开头，下面包含若干 computation，其中一个是 `ENTRY`。每条指令大致包含“结果形状 = 操作名(操作数), 属性”这样的结构，形状里会写明 dtype、维度和 layout，例如 `f32[128,256]{1,0}`。当看到 `parameter`、`dot`、`convolution`、`broadcast`、`reshape`、`fusion`、`tuple`、`get-tuple-element` 等关键字时，就能基本判断这一段在做什么。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，HLO 文本长相。一个简化的 HLO 通常可概括为：模块名、若干子 computation、一个 `ENTRY` 主计算，主计算里先声明参数，再执行算子，最后 `ROOT` 指向返回值。阅读时先找 `ENTRY` 和 `ROOT`，再沿数据依赖向上回溯，比从第一行顺读更高效。一个最小可读样例是：
+
+```
+HloModule bias_add_relu
+
+ENTRY main {
+  x    = f32[128,256]{1,0} parameter(0)
+  b    = f32[256]{0}       parameter(1)
+  bc   = f32[128,256]{1,0} broadcast(b), dimensions={1}
+  sum  = f32[128,256]{1,0} add(x, bc)
+  zero = f32[] constant(0)
+  zb   = f32[128,256]{1,0} broadcast(zero), dimensions={}
+  ROOT relu = f32[128,256]{1,0} maximum(sum, zb)
+}
+```
+
+这几行里已经出现了 dtype、shape、布局 `{1,0}`、参数、广播、常量、逐元素运算与 `ROOT`，基本涵盖了日常阅读 HLO 要认的全部原语。
+
+第二，形状标注是阅读核心。`f32[1024,1024]{1,0}` 可以拆成三部分：元素类型 `f32`、逻辑形状 `[1024,1024]`、布局顺序 `{1,0}`。如果同一段计算里频繁出现 transpose、bitcast、copy 或 layout 变化，常意味着后端布局不匹配，可能带来额外代价。
+
+第三，关键 HLO 节点类型。`fusion` 表示多个算子已被融合成一个后端执行单元，通常是观察 XLA 是否吃到优化红利的重点；`constant` 说明编译期常量；`tuple`/`get-tuple-element` 常见于多返回值、while body 或 buffer 传递；`custom-call` 往往意味着调用了某个后端特定库或外部实现；`reduce`、`map`、`while`、`conditional` 则反映更高层控制与并行语义。
+
+第四，日志与 dump 的阶段阅读顺序。常见做法是打开 `XLA_FLAGS` 或 `TF_XLA_FLAGS`，把 HLO dump 到目录中，再按文件名顺序看：先看 clustering/graph 编译信息确认函数是否真的进入 XLA；再看 `before_optimizations` 版本了解原始 HLO；再看 `after_optimizations` 或各 pass 产物确认 fusion、constant folding、layout assignment 是否生效；最后看 buffer assignment、LLVM IR、PTX 或后端 executable 信息定位最终执行形态。
+
+第五，常用日志开关。常见的是设置类似 `XLA_FLAGS=--xla_dump_to=/tmp/xla_dump --xla_dump_hlo_as_text`，必要时再配合 `--xla_dump_hlo_pass_re=...` 只观察特定 pass。如果是从 JAX 入口看 HLO，可以用 `jax.jit(f).lower(*args).compile()` 配合 `as_text()` 直接拿到优化前后的 HLO 文本；PyTorch/XLA 侧则可用 `torch_xla.core.xla_model` 提供的 graph dump 接口。不同前端、不同版本 flag 名称可能略有差异，但阅读思路基本一致。
+
+第六，读日志时要把“是否进入 XLA”和“进入后是否优化成功”分开。如果日志里根本没有对应 cluster/HLO，问题在前端没有触发编译；如果有 HLO 但没有明显 fusion 或存在大量 copy/reshape/layout 转换，问题更可能在 HLO 优化与后端映射阶段。
+
+### 4. 工程权衡 / 性能影响
+HLO 的价值在于可观测性和可优化性。它让开发者能在前端框架图之外看到更接近编译器真实决策的表示，从而解释为什么某些逐元素链路被融合、为什么某些常量被提前折叠、为什么某个大算子周围出现了很多额外 copy。
+
+代价是门槛较高。HLO 日志通常很长，单看某一个 pass 容易迷失；而且文本 IR 展示的是编译器视角，不直接等于用户写下的 Python 代码。若没有先建立“原始图 -> cluster -> HLO -> backend”的阶段意识，很容易把某个中间文件误当成最终执行结果。
+
+从性能定位角度看，HLO 日志最有帮助的不是告诉你“程序一定会更快”，而是帮助你确认优化是否发生、发生在哪个层面，以及未优化的根因是什么。比如看到大量小 `fusion` 不一定是好事，仍需结合 kernel 粒度、后端库调用和真实 profiler 数据判断。
+
+### 5. 常见追问 / 易错点
+第一，HLO 不是 LLVM IR。它比 LLVM 更高层，仍然保留张量语义、shape 与布局信息，因此更适合做算子级和图级优化。
+
+第二，看到 `fusion` 不等于一定高性能。融合过度可能增加寄存器压力、降低占用率（occupancy），或者阻碍调用更优的 vendor library。判断效果仍要回到 profiler 和实际耗时。
+
+第三，日志里文件很多时，不要从最底层 PTX 开始看。多数问题在 HLO 阶段就能定位，例如根本没聚类成功、shape 频繁变化、布局转换太多、某些 op 阻断融合。
+
+第四，很多人只看最终 `after_optimizations`，却不看 `before_optimizations`。没有前后对比，就很难知道哪些优化是新增的，哪些结构本来就存在。
+
+### 6. 实践建议
+排查 XLA 问题时，建议建立固定阅读顺序：先确认目标函数是否真的进入 XLA 编译路径（如 JAX `jit` 是否被复用、PyTorch/XLA mark step 是否触发），再看 cluster/HLO 日志，再看 `before_optimizations` 与 `after_optimizations` 的差异，最后结合 profiler 交叉验证。这样能避免只盯着 IR 文本却脱离真实性能数据。
+
+实际调优时可重点检查四类信号：是否生成预期 cluster、是否出现大面积 fusion、是否有异常多的 copy/transpose/layout 变换、是否因动态 shape 或不支持 op 导致图被切碎。把 HLO 日志和前端 framework profiler、设备端 profiler（如 NVIDIA Nsight Systems / TPU profiler）放在一起看，通常比单独阅读任一日志更有效。
+
+### 7. 30 秒速答
+- HLO 是 XLA 跨框架共享的高层 IR，保留 shape/layout 与图级优化决策。
+- 它处在前端图与后端 codegen 之间，便于做 fusion、folding、layout assignment。
+- 阅读时容易迷失在底层 dump，应按 `before_optimizations -> after_optimizations -> backend` 顺序排查。
+- 加分关键词：`HloModule`、`ENTRY`、`f32[..]{1,0}`、`fusion`、`XLA_FLAGS=--xla_dump_to`。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清 HLO 与 LLVM IR、PyTorch FX 的层次差异？
+- [ ] 你能不能解释 `f32[128,256]{1,0}` 里每一段分别代表什么？
+- [ ] 你能不能举一个用 HLO dump 定位“没融合上”问题的具体场景？
+- [ ] 你能不能说出“只看 after_optimizations、不看 before_optimizations”这种典型误区？
+
+## Q2. TVM 的 Ansor 和 MetaSchedule 的区别？如何搜索最优 schedule？
+
+> 🔴 专家 · 一个算子在 GPU 上能跑多快，往往不取决于公式，而取决于循环怎么 tile、线程怎么绑、`shared memory` 怎么 cache。手写 schedule 又慢又不可移植，TVM 这套自动搜索就是给“总不能为每张卡每个 shape 重写一遍”的人准备的。
+
+### 1. 核心结论
+Ansor 和 MetaSchedule 都是在 TVM 里自动搜索高性能 schedule 的方案，但它们所依赖的抽象层和可扩展性不同。Ansor 更偏“基于 TE 计算描述的 auto-scheduler”，核心思路是在 hand-crafted sketch 和搜索规则定义的空间内，通过代价模型与实测反馈寻找较优 schedule；MetaSchedule 则更偏“围绕 TensorIR/TIR 的统一自动调优框架”，把搜索空间生成、变换规则、后处理、数据库复用和测量流程做得更模块化、更通用。
+
+如果面试要一句话概括：Ansor 是 TVM 早期较成熟的自动调度器，擅长在 TE compute DAG 上自动找 schedule；MetaSchedule 是后续更现代的调优框架，直接面向 TensorIR，强调可组合 schedule rule、可复用调优记录与更统一的搜索基础设施。搜索最优 schedule 的本质不是穷举，而是在合法 schedule 空间中结合启发式、代价模型和真实性能测量进行迭代逼近。
+
+### 2. 底层原理
+TVM 的 schedule 优化目标，是在不改变语义的前提下，重写循环结构与内存访问方式，使代码更贴合目标硬件。常见变换包括 tiling、reorder、vectorize、unroll、parallel、cache read/write、tensorize、thread binding、software pipeline 等。不同 schedule 会直接影响访存局部性、并行度、寄存器压力、共享内存使用和最终生成代码的占用率（occupancy）。
+
+Ansor 的核心输入通常是 TE compute graph。系统会先从计算图中抽取计算 DAG，再依据内置规则生成若干 schedule sketch，例如如何 tile、是否 cache、如何映射线程块。之后通过搜索策略生成候选 schedule，交给编译与测量模块在真实硬件上跑，再利用 cost model 预测更值得探索的候选。
+
+MetaSchedule 则把这一过程推进到 TensorIR 层。它不再把搜索紧绑定在 TE 上，而是围绕 TIR block / loop 结构进行 schedule 变换。搜索空间由 schedule rules、mutator、postprocessor、builder、runner、database 等组件协同定义，因而更容易承接 TensorIR 统一优化路径，也更适合长期扩展到不同后端与不同调优工作流。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，Ansor 与 MetaSchedule 的抽象差异。Ansor 主要工作在 TE + auto-scheduler 体系中，中心对象是 compute DAG 与 sketch search（在 TVM 源码中常落在 `tvm.auto_scheduler`）；MetaSchedule 主要工作在 TensorIR/TIR 上，中心对象是 block、loop 以及对 `tvm.tir.Schedule` 的一系列变换（入口常见是 `tvm.meta_schedule`）。前者更像“针对算子调优的自动搜索器”，后者更像“通用调度搜索框架”。
+
+第二，搜索空间定义方式不同。Ansor 的搜索空间很大程度由内置 sketch 和规则决定，搜索策略围绕这些模板化结构展开；MetaSchedule 则把空间定义拆成 schedule rule、postprocessor、mutator 等组件，开发者可以更细粒度地控制哪些 block 能 tile、哪些循环可绑定到线程、哪些结果必须过合法性检查。
+
+第三，测量与反馈机制。两者都强调“最终以真实运行测量为准”，但 MetaSchedule 更强调调优记录数据库和跨 workload 复用。一次调优得到的 trace、测量结果和最佳 schedule 可写入 database，后续相似 workload 能直接 warm start 或重用最佳记录，而不是每次都从头开始。
+
+第四，如何搜索最优 schedule。通常遵循以下链路：先把算子或子图 lowering 到 TE/TIR 表示；生成初始 schedule 候选；通过规则展开出大量合法变体；用代价模型或启发式选择一批最有希望的候选；交给 builder/runner 编译并在真实设备上执行；把耗时反馈给 cost model 和数据库；持续迭代，最终选择延迟最小或吞吐最高的 schedule。这里的“最优”通常是给定硬件、给定输入形状、给定约束下的局部最优，而不是数学意义上的全局最优。
+
+第五，为什么不能只靠代价模型。因为真实硬件性能不仅由静态循环结构决定，还受寄存器分配、cache 行为、bank conflict、指令选择、后端编译器细节等影响。代价模型更像筛选器，真正定夺仍要靠测量。
+
+### 4. 工程权衡 / 性能影响
+Ansor 的优点是思路直观、历史成熟、在很多算子级调优问题上已经证明有效；缺点是与 TE 绑定较深，面对 TensorIR 成为核心表示后的新基础设施时，灵活性和统一性不如 MetaSchedule。MetaSchedule 的优点是抽象更统一、扩展点更清晰、数据库复用更自然；缺点是系统更复杂，理解门槛更高，调优链路也更依赖 TIR 层经验。
+
+性能上，两者最终都可能得到非常接近手工调优的 schedule，但收益高度依赖搜索预算。预算太小，搜索很容易停在次优解；预算足够大，又会带来可观的调优时间与算力成本。因此自动调优通常适合“算子会被大量重复执行、一次调优可长期复用”的场景，而不适合生命周期极短的临时 workload。
+
+### 5. 常见追问 / 易错点
+第一，不要把 Ansor 和 AutoTVM 混为一谈。AutoTVM 更偏模板化调参，开发者先写 schedule template，再搜索模板参数；Ansor 则试图减少手写模板，自动生成更大的 schedule 空间。
+
+第二，也不要把 MetaSchedule 理解成“Ansor 的简单改名”。它在 IR 抽象层、数据库设计、调度规则组织方式上都有明显重构。
+
+第三，所谓“最优 schedule”往往强依赖目标硬件、数据形状和精度配置。同一个算子在 A100、消费级 GPU 和 ARM CPU 上，最优 tile/thread binding 往往完全不同。
+
+第四，真实部署中还要考虑 compile time、binary size、调优成本和泛化能力，不能只看单一 benchmark 延迟。
+
+### 6. 实践建议
+如果工作流仍围绕传统 TE 算子自动调优，理解 Ansor 的 sketch、cost model 和测量闭环很有价值；如果已经进入 TensorIR 为主的新 TVM 体系，则更应优先掌握 MetaSchedule 的 schedule rule、trace、database 与 replay 机制。
+
+调优时不要只追求最高峰值性能，建议同时记录搜索预算、最佳记录的稳定性、对 shape 变化的敏感度以及调优结果能否跨设备复用。真正可落地的“最优 schedule”，通常是性能、调优成本和维护复杂度三者的折中。
+
+### 7. 30 秒速答
+- Ansor 在 TE 上自动生成 sketch + 搜索，MetaSchedule 围绕 TensorIR 做统一调优框架。
+- 二者都靠 cost model 筛选候选、真实测量定夺，但 MetaSchedule 的 rule/database 更模块化。
+- 易踩的坑是把“最优 schedule”当成全局解，实际依赖硬件、shape 与搜索预算。
+- 加分关键词：`auto_scheduler`、`tvm.meta_schedule`、TensorIR、schedule rule、tuning database。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清 Ansor 与 MetaSchedule 在 IR 抽象层上的差异？
+- [ ] 你能不能解释 cost model 与真实测量在搜索闭环中各自的角色？
+- [ ] 你能不能举一个“调优结果不能跨硬件复用”的典型场景？
+- [ ] 你能不能说出 AutoTVM、Ansor、MetaSchedule 三者之间常被混淆的关系？
+
+## Q3. MLIR 的设计哲学是什么？dialect、operation、pass 的概念？
+
+> 🟡 进阶 · 早期编译器把所有东西挤进一层 IR，结果 tensor 形状、量化信息、循环结构早早被压平，后面想优化也回不去了。MLIR 的回答是：让 `dialect` 在合适的层次保留合适的信息，再一层层往下 lower——理解这点你才知道为什么会有这么多 dialect。
+
+### 1. 核心结论
+MLIR 的核心设计哲学是“多层次中间表示”，即不强迫所有编译阶段都挤进单一 IR，而是允许不同抽象层、不同领域语义通过统一基础设施共存与渐进 lowering。它既想保留高层语义，便于做领域特定优化；又想复用统一的 IR 结构、类型系统、重写规则和 pass 管线，避免每个框架都重复造一套编译器骨架。
+
+因此，MLIR 不是单一的一门“语言”，而是一套可扩展 IR 基础设施。dialect 用来承载某个领域的一组操作与类型；operation 是 IR 中最基本的语义单元；pass 则是在 IR 上执行分析、重写、lowering 和优化的处理阶段。面试里若把 MLIR 说成“LLVM 的上层语法糖”会过于浅薄，它真正的价值在于统一多层表示和多领域编译流水线。
+
+### 2. 底层原理
+传统编译器常常使用较少层次的 IR：高层前端 AST 很快 lowering 到相对统一的中低层 IR，再一路优化到机器码。但机器学习与异构计算场景里，过早 lowering 会丢失张量形状、并行语义、稀疏结构、量化信息、内存空间等高层知识，导致后续优化空间受限。
+
+MLIR 通过 region、block、operation、attribute、type 等统一机制，让高层 IR 和低层 IR 都能以相似方式表达。比如 affine dialect 适合描述规则循环与访存，linalg dialect 适合表达结构化张量算子，gpu / nvvm / llvm dialect 则进一步靠近硬件与 LLVM IR。这样，编译器可以在恰当层次上做恰当优化，而不是一开始就把所有内容压平。
+
+这种设计也意味着 lowering 不是“一跳到底”，而是多阶段转换：从前端框架特定 dialect，到通用 tensor/linalg/arith/scf，再到 bufferization、gpu、llvm 等更低层 dialect。每一步都尽量保留当前阶段最有价值的语义信息。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，dialect。dialect 可以理解为某个领域定义的一组 IR 语义命名空间，里面可以声明自己的 operation、type、attribute、interface 和 canonicalization 规则。它的作用是把“这个领域关心的语义”显式保存在 IR 里，而不是被迫翻译成过于通用、信息贫乏的指令集合。
+
+第二，operation。operation 是 MLIR 的核心基本单位，每个 op 都有名字、操作数、结果、属性，必要时还可携带 region。相比传统三地址码，MLIR 的 operation 更一般化，可以既表示 `arith.addi` 这样的低层算术，也表示 `linalg.matmul` 这样的高层结构化算子，还能表示函数、循环、条件分支甚至整个子区域。一个最小可读片段：
+
+```mlir
+func.func @add(%a: tensor<4xf32>, %b: tensor<4xf32>) -> tensor<4xf32> {
+  %c = arith.addf %a, %b : tensor<4xf32>
+  return %c : tensor<4xf32>
+}
+```
+
+这里 `func.func` 本身也是一个带 region 的 operation，region 内又包含 `arith.addf` 这类更低层 op，充分展示了 “operation 可以嵌套 region、不同 dialect 可以共存于一张 IR” 的特征。
+
+第三，pass。pass 是对 IR 执行分析或转换的阶段，可以是 module 级、function 级、operation 级。它既可以做 canonicalization、CSE、folding、dead code elimination，也可以做 dialect conversion 和 lowering。MLIR 的一大价值就在于不同 dialect 可以共享 pass manager、pattern rewrite、analysis infrastructure，而不必每套 IR 都单独写一套流水线框架。
+
+第四，pattern rewrite 与 conversion。很多 lowering 不是手写一次性遍历，而是通过 declarative 或 imperative rewrite pattern，把某类 op 匹配后替换成另一组 op。配合 conversion target 和 legality 机制，就能表达“哪些 dialect 在当前阶段合法、哪些 op 必须被进一步 lowering”。
+
+第五，为什么要多 dialect 共存。因为前端、算子级优化、循环优化、buffer 化、设备映射和后端代码生成关注的信息不同。MLIR 允许这些信息在不同阶段以最合适的形式存在，同时通过统一的 IR 容器与 pass 基础设施相互衔接。
+
+### 4. 工程权衡 / 性能影响
+MLIR 的优势是扩展性强、语义保留能力好、编译阶段组织清晰。对机器学习编译器而言，这意味着可以先在高层 tensor/linalg 层做融合和算子重写，再在 affine/scf 层做循环优化，再在 gpu/llvm 层做设备与后端映射，而不是把所有问题堆在一个 IR 层解决。
+
+代价是系统复杂度显著上升。dialect 太多时，开发者容易迷失于 lowering 路径与 legality 约束；如果 dialect 设计不当，反而会造成 pass 边界混乱、语义重复和维护负担。此外，多层 IR 并不自动等于高性能，真正效果仍取决于是否在正确层次做了正确优化。
+
+### 5. 常见追问 / 易错点
+第一，dialect 不是“插件名称”，而是一组操作与类型语义的集合。它的关键不在命名空间，而在该命名空间是否携带了某类优化所需的领域信息。
+
+第二，operation 不等于“只能是一条简单指令”。在 MLIR 中，函数、循环、条件甚至包含 region 的复杂结构都可以是 operation。
+
+第三，pass 也不只是“优化 pass”。很多 pass 的职责是分析、验证、buffer 化或 dialect conversion，未必直接降低运行时间。
+
+第四，不要把 MLIR 与某个特定框架绑定。虽然它在 TensorFlow、IREE、Torch-MLIR 等项目里很重要，但 MLIR 本身是一套通用编译器基础设施。
+
+### 6. 实践建议
+学习 MLIR 时，建议按“高层语义保留 -> 渐进 lowering -> 统一重写基础设施”的主线理解，而不是一上来死记大量 dialect 名称。只要抓住 operation 是基本语义单元、dialect 是语义集合、pass 是转换阶段，很多具体项目的流水线都能举一反三。
+
+工程实践里，设计自定义 dialect 时应先想清楚：这层 IR 想保留什么信息、哪些优化必须在这层做、何时 lower 到下一层。若这个问题答不清，往往意味着 dialect 设计还不够稳定。
+
+### 7. 30 秒速答
+- MLIR 是多层 IR 基础设施，允许 dialect 在合适抽象层保留合适语义。
+- dialect 承载领域操作/类型，operation 是核心单元，pass 负责分析与渐进 lowering。
+- 易踩的坑是 dialect 过多导致 lowering 路径混乱，复杂度并不自动等于高性能。
+- 加分关键词：`linalg`/`affine`/`scf`/`gpu`/`llvm` dialect、region、pattern rewrite、dialect conversion。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清 MLIR 与 LLVM 在抽象层次上的关系？
+- [ ] 你能不能解释一个 `func.func` 内为何能同时包含多个 dialect 的 op？
+- [ ] 你能不能举一个“高层语义保留有价值”的具体优化场景（如 linalg fusion）？
+- [ ] 你能不能说出“dialect 越多越好”这种常见误解的反例？
+
+## Q4. TorchInductor 如何将 PyTorch graph 编译成 Triton kernel？
+
+> 🟡 进阶 · `torch.compile` 之所以能加速，靠的不是把每个 op 翻成 Triton，而是把一堆 pointwise/reduction 拼成一个大 kernel。搞不清这条链路，你就解释不了“为什么 torch.compile 没加速”——多半是 graph 在前面被 break 掉了，Triton 还没出场就结束了。
+
+### 1. 核心结论
+TorchInductor 是 PyTorch 2.x 编译栈中的后端代码生成器之一，它接收 TorchDynamo / AOTAutograd 处理后的图表示，对算子做融合、调度和代码生成，并在 GPU 上优先把大量 pointwise、reduction、部分 matmul 类计算 lowering 成 Triton kernel。简单说，它不是直接把任意 Python 代码翻译成 Triton，而是先把可编译的 PyTorch graph 规整到更适合后端生成的 IR，再根据访问模式与并行结构生成 Triton 源码并即时编译执行。
+
+其关键价值不在“把一个 op 变成一个 kernel”，而在“把多个可融合算子整合成更少的高效 kernel，并自动决定循环结构、tile、索引和内存访问”。因此，TorchInductor 的性能收益常常来自图级融合 + 针对 GPU 的 Triton codegen，而不仅仅是单个 Triton kernel 本身。
+
+### 2. 底层原理
+PyTorch 2.x 典型链路是：TorchDynamo 截获 Python 执行并抽取 FX graph；AOTAutograd 将前向与反向图进一步规范化并做分解；TorchInductor 读取这些较干净的图，把高层算子转换为自身更适合调度的 loop-level IR，再按目标设备生成代码。GPU 路径中，适合自定义 kernel 的子图通常会被转成 Triton kernel；不适合的部分则可能回退到 ATen/cuBLAS/cuDNN 等现成库调用。
+
+Inductor 之所以适合生成 Triton，是因为 Triton 提供了比 CUDA 更高层、但仍能精确控制 block/thread 索引和内存访问的编程模型。Inductor 可以自动构造索引公式、加载/存储模式、mask、分块策略和 reduction 结构，再交由 Triton 编译器生成底层 PTX 或其他后端代码。
+
+也就是说，TorchInductor 不是和库调用对立的。它通常会先判断某一段图更适合“融合成 Triton kernel”还是“调用成熟 vendor library”，最终目标是整体性能最优，而不是强行全部自编译。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，图捕获。TorchDynamo 在 Python frame 层面拦截执行，识别可追踪的 Tensor 运算，输出 FX graph。图中若存在 Python 动态控制流、数据相关副作用或不支持的对象操作，则会 graph break，导致该段无法进入后续 Inductor 流程。
+
+第二，图规范化与分解。AOTAutograd 会把训练图拆成前向/反向，并把部分高层 ATen op 分解成更基础的算子组合。这一步很重要，因为更细粒度、更规范的算子更容易被 Inductor 做 pattern matching 与融合。
+
+第三，Inductor IR 与 fusion。Inductor 会把 FX/ATen 图转成更接近循环与索引表达的内部 IR，分析哪些 pointwise、broadcast、reduction、layout 变换可以放进同一个 kernel。融合时要同时考虑数据依赖、shape、一致的迭代空间以及寄存器/共享内存压力，不能无限制地把节点全拼在一起。
+
+第四，Triton codegen。对 GPU 子图，Inductor 会生成 Triton 程序骨架，包括 program id 到张量索引的映射、block 大小、加载/存储、mask 越界保护、reduction 逻辑和中间值计算。随后通过 Triton JIT 编译为目标 GPU 可执行代码，并把编译结果缓存起来，供相同或兼容 shape 的后续调用复用。
+
+第五，自动调参与回退。某些 kernel 会尝试不同的 tile/block 配置并做 autotune；某些模式如大规模 GEMM、卷积、特殊 layout 或复杂算子，则可能更适合直接调用 cuBLAS/cuDNN/ATen。Inductor 的工程重点是“选择正确后端”，而不是执着于所有节点都进入 Triton。
+
+### 4. 工程权衡 / 性能影响
+TorchInductor + Triton 的优势是能显著减少小 kernel 数量，把原先碎片化的 eager 执行合并成更粗粒度的 GPU kernel，从而降低 launch overhead、减少中间张量落地并提升带宽利用率。对 Transformer block 中大量 pointwise、normalization、bias、activation、dropout 周边计算，收益尤其明显。
+
+代价首先是编译开销。首次运行要经过图捕获、代码生成和 Triton JIT，冷启动通常比 eager 慢。其次是兼容性与可调试性问题：一旦 graph break 很多、dynamic shape 复杂、算子组合特殊或 Triton/驱动版本存在约束，收益会明显下降，甚至出现编译失败或回退路径过多。
+
+还要注意，融合不是越大越好。过大的 Triton kernel 可能导致寄存器压力高、占用率下降、编译时间变长，甚至不如拆分后调用成熟库。实际性能取决于 fusion 粒度、后端选择和 autotune 结果。
+
+### 5. 常见追问 / 易错点
+第一，不要把 TorchInductor 说成“直接把 FX graph 翻译成 Triton”。中间还经历了 graph normalization、内部 IR、fusion、调度决策与后端选择。
+
+第二，也不要误以为 GPU 路径一定全部落到 Triton。很多场景仍会保留对 ATen、cuBLAS、cuDNN 的调用。
+
+第三，TorchInductor 与 Triton 也不是一回事。Inductor 是更高层的图编译后端，Triton 是其中一个重要的 GPU kernel 生成目标。
+
+第四，graph break 是性能调优重点。很多“torch.compile 没加速”的根因，不是 Triton 不够快，而是前面根本没有形成足够大的可编译图。
+
+### 6. 实践建议
+分析 TorchInductor 性能问题时，建议按链路排查：先看 Dynamo 是否频繁 graph break，再看 AOTAutograd/分解后图是否足够规整，再看 Inductor 是否产生预期 fusion 与 Triton kernel，最后结合 profiler 判断哪些算子仍在走库调用或 eager 回退。常用定位手段包括：用 `torch._dynamo.explain(fn)(*args)` 或 `TORCH_LOGS=graph_breaks,recompiles` 观察 break/recompile 原因；用 `TORCH_COMPILE_DEBUG=1` 把 Inductor 每一层中间 IR 与生成的 Triton 源码 dump 到磁盘；再用 `torch.profiler` 确认最终热点 kernel 是自动生成的 `triton_poi_fused_*` 还是仍然回退到 ATen。
+
+需要同时关注冷启动和稳态性能，并记录 dynamic shape、缓存命中率、生成 kernel 数量和 autotune 耗时。若目标是生产稳定性，不应只盯某个 benchmark 的峰值加速比，而要看整体编译收益是否覆盖了复杂性成本。
+
+### 7. 30 秒速答
+- Inductor 把 Dynamo/AOTAutograd 处理后的图 fuse 成更少更大的 Triton kernel。
+- 关键是 graph normalization、Inductor IR fusion、Triton codegen 与 vendor library 的取舍。
+- 多数“没加速”问题来自 graph break 与 dynamic shape，Triton 还没出场就结束。
+- 加分关键词：FX graph、AOTAutograd、`triton_poi_fused_*`、`TORCH_COMPILE_DEBUG=1`、`torch._dynamo.explain`。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清 Inductor 与 Triton 的分工？
+- [ ] 你能不能解释 AOTAutograd 的分解为什么对 Inductor fusion 重要？
+- [ ] 你能不能举一个 `torch.compile` 没加速、根因是 graph break 的实战场景？
+- [ ] 你能不能说出“GPU 路径下所有 op 都走 Triton”这种典型误解？
+
+## Q5. ONNX Runtime 的图优化有哪些？constant folding、operator fusion 等
+
+> 🟡 进阶 · 同一份 ONNX 模型，开 ORT 优化和不开能差出几倍速度。线上 transformer 跑得慢，根因常常是 `Attention`/`SkipLayerNorm` 没融合上，或者图被切成一堆小子图在 CPU/CUDA/TensorRT 之间反复横跳。
+
+### 1. 核心结论
+ONNX Runtime（ORT）的图优化核心目标是：在不改变 ONNX 语义的前提下，把计算图变得更小、更规整、更适合具体执行提供者（Execution Provider, EP）运行。常见手段包括 constant folding、无效节点消除、算子融合、布局变换优化、类型与形状传播、节点重排以及面向特定 EP 的专用优化。
+
+如果面试要求总结，最好按层次回答：一类是基础图清理，如常量折叠、死节点消除、恒等消除；一类是图模式融合，如 Conv+Bias+Activation、LayerNorm、Attention 等；一类是后端相关优化，如为 TensorRT、CUDA、CPU oneDNN 等 EP 改写成更适合其执行的子图或内核调用。constant folding 和 operator fusion 只是其中最常见、最容易被问到的两个代表。
+
+### 2. 底层原理
+ORT 在加载 ONNX 模型后，通常不会立刻逐节点原样执行，而是先构建内部图表示并运行一系列 graph transformer。其核心思想是：若某些子图可在编译/加载期就确定结果，就直接折叠成常量；若若干相邻节点形成经典模式且语义等价于更高效实现，就替换成 fused op 或交由 EP 的高性能实现；若某些节点对最终结果没有贡献，则直接删除。
+
+这样做的收益有三点。第一，减少运行时节点数和中间张量。第二，提高内存局部性，降低调度开销。第三，让更大、更规整的子图能整体下沉到某个 EP，而不是零散地在不同后端之间切换。尤其在异构执行场景下，子图切碎常常比单个算子慢更致命。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，基础优化。典型包括 constant folding、identity/eliminate nop、dropout/unused node 删除、shape inference、common subexpression 简化、cast/transpose/slice/reshape 等无效或可合并链路的压缩。这类优化的目标是先把图“清理干净”，为后续更高级的融合创造条件。
+
+第二，算子融合。常见模式有 Conv + Add/Bias + Activation、Gemm + Activation、LayerNorm、SkipLayerNorm、Attention、GELU、QDQ 链路以及部分 transformer block 专用模式。融合后的收益不仅在于少几个节点，还在于可以直接命中高性能 kernel，减少中间结果写回。
+
+第三，布局与内存相关优化。某些后端更偏好特定 layout，例如 NCHW/NHWC；ORT 会尽量减少不必要的 transpose，并在需要时做 layout propagation。若布局转换插得太多，会直接吞掉 fusion 带来的收益，因此布局优化常常与算子融合一起考虑。
+
+第四，EP 分区与子图下沉。ORT 会根据各 EP 支持的算子集合与模式，把图分成若干子图交给 CUDA、TensorRT、oneDNN、OpenVINO 等后端执行。图优化的一个重要目标就是让可下沉子图尽量大、边界尽量少，否则频繁在 EP 之间切换会带来额外复制与调度成本。
+
+第五，优化级别。通常会接触基础、扩展、全部等不同 graph optimization level；在 ORT API 中这四档的命名是 `ORT_DISABLE_ALL`、`ORT_ENABLE_BASIC`、`ORT_ENABLE_EXTENDED`、`ORT_ENABLE_ALL`。级别越高，激进融合和 EP 相关改写越多，但也越依赖模型模式是否被覆盖、形状信息是否充分以及目标后端是否支持。调优时可配合 `SessionOptions.optimized_model_filepath` 把优化后的图落盘，再和原图 diff，确认关键 fusion（如 Attention、SkipLayerNormalization）是否真的生成。
+
+### 4. 工程权衡 / 性能影响
+基础优化几乎总是安全且高性价比，因为它们主要清理显而易见的冗余节点；高级融合和 EP 相关优化则可能带来更大收益，但也更依赖模型结构与后端兼容性。对 transformer、CNN、量化模型而言，好的融合常常能显著减少 latency 和内存带宽压力。
+
+代价主要体现在三个方面。第一，优化更激进时，debug 可读性下降，图与原始 ONNX 已不再一一对应。第二，某些融合依赖静态形状或特定 pattern，模型稍微变形就可能失效。第三，不同 EP 的最优图形态并不一致，面向一个后端的重写不一定适合另一个后端。
+
+### 5. 常见追问 / 易错点
+第一，constant folding 不是“把所有节点都提前算掉”。只有输入在加载期已知、无状态且可安全提前执行的子图才能折叠。
+
+第二，operator fusion 也不是“节点越少越好”。如果融合阻碍了某个 EP 识别更优模式，或者引入额外 layout 变换，最终未必更快。
+
+第三，很多人忽视 EP 分区。实际部署时，性能差往往不是单个节点慢，而是图被切得太碎，导致 CPU/CUDA/TensorRT 之间来回切换。
+
+第四，开启最高优化级别后出现问题时，排查要先区分是 ONNX 导出问题、ORT 图优化问题，还是具体 EP 的兼容性问题。
+
+### 6. 实践建议
+调 ORT 性能时，建议先确认 graph optimization level、启用的 EP、模型是否成功触发关键 fusion，再看 profiling 中是否存在大量跨 EP 边界、transpose 或小节点残留。若目标是 TensorRT/CUDA 等后端，重点往往不是“多开几个优化开关”，而是让更多连续子图能被完整下沉。
+
+工程实践里可同时保存优化前后图、开启 profiling，并比较节点数、EP 分区结果、关键 fused op 是否出现。只有把优化前后图结构与真实性能数据对照起来，才能判断 constant folding、operator fusion 等是否真的产生了收益。
+
+### 7. 30 秒速答
+- ORT 图优化分基础清理、算子融合、布局优化与 EP 分区四个层次。
+- 目的是减少节点、命中高性能 kernel，并让可下沉子图尽量大。
+- 易踩的坑是 EP 分区把图切碎，CPU/CUDA/TensorRT 之间反复横跳吃掉融合收益。
+- 加分关键词：`ORT_ENABLE_ALL`、SkipLayerNormalization、Attention fusion、Execution Provider、`optimized_model_filepath`。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清 ORT 四档 graph optimization level 的差别？
+- [ ] 你能不能解释为什么 EP 分区比单 op 优化更影响线上性能？
+- [ ] 你能不能举一个 transformer 模型 Attention 没被 fuse 上的排查场景？
+- [ ] 你能不能说出“开最高优化级别一定更快”这种常见误解？
+
+## Q6. TensorRT 的 plugin 开发流程？如何支持 dynamic shape？
+
+> 🔴 专家 · 业务总会有 TensorRT 原生不支持的 op，写个 plugin 是把整图留在 engine 里的唯一办法。但很多人只写了 kernel，忘了 creator、序列化和 dynamic shape 的维度推导，结果 engine 一落盘就废了，或者一改 batch 就崩。
+
+### 1. 核心结论
+TensorRT plugin 的作用是在原生算子集合之外，为自定义层、特殊融合模式或第三方算子提供可被 TensorRT engine 调用的实现。开发流程的本质是：定义 plugin 接口与参数、让 builder 在构图/反序列化时能创建它、声明支持的数据格式与类型、在运行阶段完成 enqueue 执行，并确保序列化后可稳定重建。
+
+支持 dynamic shape 的关键不只是“运行时拿到不同 shape”，而是 plugin 在构建期就要具备基于符号维度推导输出 shape、声明格式支持、配合 optimization profile 做 shape 范围约束的能力。现代 TensorRT 中，动态形状 plugin 通常要使用支持动态维度推导的接口，而不是停留在早期静态 shape 插件写法。
+
+### 2. 底层原理
+TensorRT engine 构建时，会先把网络中的层转成内部执行图，再针对目标 GPU、精度和 shape profile 做 tactic 选择与内存规划。原生层 TensorRT 已知如何推导形状、选择 kernel 和执行；plugin 则需要开发者自己告诉 TensorRT：这个层输入输出是什么、支持哪些数据类型/format、序列化时如何保存状态、运行时如何根据输入 shape 启动自定义 kernel。
+
+对 dynamic shape 而言，TensorRT 在显式 batch / 动态维度模式下不会把所有维度都固定死，而是基于 optimization profile 中的 min/opt/max shape 构建 engine。plugin 必须能在这个范围内正确推导输出维度，并在运行时根据实际输入 shape 使用正确的 workspace、launch 参数和边界检查。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，定义 plugin 类与 creator。通常需要实现对应版本的 plugin 接口，以及配套的 `IPluginCreator` 或更新接口，用于在解析 ONNX、手工构图或反序列化 engine 时创建 plugin 实例。creator 负责暴露字段集合、名称、版本与 namespace，使 TensorRT 能识别并恢复该 plugin。历史演进上常见三代接口：静态 shape 的 `IPluginV2(Ext)`、支持显式 batch + 动态维度的 `IPluginV2DynamicExt`（配 `IPluginCreatorV2`），以及较新的 `IPluginV3` / `IPluginCreatorV3` 等更统一接口；要支持 dynamic shape，基本不应再走 V2（静态）路径。
+
+第二，声明支持能力。plugin 需要实现诸如输出维度推导、数据类型/format 支持检查、workspace 大小查询、序列化/反序列化等接口。对 dynamic shape，关键是使用支持符号维度表达的接口来返回输出 shape，而不是把维度写死；同时在格式检查中要明确支持 FP32、FP16、INT8、linear/chw 等哪些组合。
+
+第三，执行路径。真正计算通常写在 CUDA kernel 或调用外部库中，在 `enqueue` 或对应运行接口里根据输入地址、输出地址、workspace、stream 和当前 shape 启动。若 plugin 有多个 kernel 路径，通常还要在 configure 阶段缓存维度、stride、精度或 tactic 选择结果。
+
+第四，序列化与注册。为了让 engine 可持久化，plugin 必须把必要状态写入字节流，并能在反序列化时准确恢复。然后需要通过 TensorRT 的 plugin registry 注册 creator，确保解析模型或加载 engine 时能找到相应实现。
+
+第五，dynamic shape 支持要点。通常包括：在网络定义中开启显式 batch；为输入配置 optimization profile 的 min/opt/max；plugin 的维度推导接口返回随输入变化的输出表达式；运行时通过 execution context 设置实际输入 shape；plugin 内部根据当前 shape 重新计算 launch 参数和 workspace。若 shape 依赖某些 shape tensor，还要保证 plugin 能正确读取并使用这些动态信息。
+
+### 4. 工程权衡 / 性能影响
+plugin 的好处是能把 TensorRT 原生不支持或支持不足的算子纳入高性能推理图，并保留 engine 内部调度与内存管理优势。对某些自定义注意力、后处理算子、融合层或业务特定 op，plugin 往往是把整图留在 TensorRT 里的唯一办法。
+
+代价在于维护成本高。你要自己保证数值正确性、序列化兼容性、版本接口适配、不同精度支持以及不同 shape/profile 下的稳定性。dynamic shape 又进一步放大测试面，因为同一个 plugin 要覆盖多个输入区间，稍有不慎就会在边界 shape 上出现越界、workspace 不足或性能骤降。
+
+### 5. 常见追问 / 易错点
+第一，很多人只实现计算逻辑，却忽视 creator、registry 和序列化，结果 plugin 只能在当前进程里跑，engine 落盘后无法恢复。
+
+第二，支持 dynamic shape 不是简单地在 kernel 里读 `N`、`H`、`W`。如果输出维度推导、profile 范围、workspace 估算和 format 检查没有同步支持，构建期或运行期都会出问题。
+
+第三，INT8/FP16 支持常被低估。即使 FP32 跑通，如果 `supportsFormatCombination` 或量化尺度处理写得不完整，也无法真正接入生产推理链路。
+
+第四，很多性能问题不在 plugin kernel 本身，而在 profile 设得太宽、opt shape 不合理、batch/sequence 长度分布与 engine 优化点不匹配，导致 tactic 与资源规划无法命中真实热点。
+
+### 6. 实践建议
+开发 TensorRT plugin 时，建议先从最小可用版本做起：先跑通 FP32 + 固定 shape + 正确序列化，再逐步扩展到 FP16、INT8 与 dynamic shape。每扩一个能力面，都应补上构建期测试、反序列化测试、边界 shape 测试和基准测试。
+
+若需要支持 dynamic shape，务必根据真实线上 shape 分布设计 optimization profile，而不是把 min/max 拉得极宽。profile 设计、输出维度推导和 kernel launch 策略往往共同决定了插件的最终性能与稳定性，单纯把接口补齐并不等于真正支持好了动态形状。
+
+### 7. 30 秒速答
+- TRT plugin 需要 plugin 类 + creator + registry + 序列化四件套同时完整。
+- dynamic shape 关键是用 `IPluginV2DynamicExt`/`IPluginV3` 做符号维度推导并配合 optimization profile。
+- 易踩的坑是 profile 设得太宽、`supportsFormatCombination` 不全，FP16/INT8 接不上。
+- 加分关键词：`IPluginV3`、`IPluginCreator`、optimization profile、`getOutputDimensions`、`enqueue`。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清 plugin 与 creator 各自的职责？
+- [ ] 你能不能解释 optimization profile 中 min/opt/max 对 plugin 的约束？
+- [ ] 你能不能举一个 plugin 在 engine 反序列化时崩溃的具体原因？
+- [ ] 你能不能说出“只实现 kernel 不写 creator”这种典型踩坑？
+
+## Q7. 解释 loop tiling、loop unrolling、vectorization 在编译器优化中的作用
+
+> 🟢 基础 · 同一段矩阵乘，写得朴素几行就慢十倍——差距全在循环怎么切、怎么展、怎么向量化。`tiling` 解决访存局部性、`unrolling` 解决控制开销、`vectorization` 解决吞吐，三件事各管一段，混淆了就不知道该往哪个方向调。
+
+### 1. 核心结论
+loop tiling、loop unrolling、vectorization 是编译器里最常见、也最基础的循环优化手段，但三者解决的问题并不一样。loop tiling 的目标是改善缓存/片上存储局部性，把大迭代空间切成更适合 cache、shared memory 或寄存器的块；loop unrolling 的目标是减少循环控制开销、暴露更多指令级并行性；vectorization 的目标是把标量计算改写成 SIMD/SIMT 友好的并行指令，一次处理多个元素。
+
+如果面试要一句话总结，可以说：tiling 主要优化数据复用与访存层次，unrolling 主要优化控制开销与指令调度，vectorization 主要优化单指令多数据吞吐。三者常常联合使用，例如先 tile 保证数据局部性，再在 innermost loop 上 unroll 和 vectorize，以同时提升访存效率和计算并行度。
+
+### 2. 底层原理
+现代处理器的瓶颈往往不只是算力，而是访存层次与执行单元利用率。若循环顺序和数据访问模式不合理，CPU/GPU 可能大量时间耗在 cache miss、memory stall 或指令发射不足上。循环优化的目标就是改写迭代结构，使程序更符合硬件执行模型。
+
+loop tiling 通过把原本大的二维或多维循环切成小块，尽量让一个 tile 的数据能在 cache/shared memory 中被重复利用，而不是每次重新从更慢层次取数。矩阵乘法是典型例子：若不分块，A/B/C 的重访存代价很高；分块后，一个 tile 内的数据复用率明显上升。
+
+loop unrolling 则是把多次迭代的循环体展开到同一个基本块里，减少 branch、计数器更新和边界检查等控制开销，同时让编译器更容易做寄存器分配、指令重排和流水线填充。vectorization 则进一步要求循环具备足够规则的独立迭代，把多个相邻标量操作映射为 SSE/AVX/NEON 或 GPU 宽向量/warp 友好的操作。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，loop tiling 的关键是 tile size 选择。tile 太小，控制开销增加且复用不明显；tile 太大，又会超出 cache/shared memory 容量，反而带来冲突和 thrashing。编译器或 auto-scheduler 往往会结合 cache 大小、向量宽度、寄存器数、线程块规模来决定 tile 形状。
+
+第二，loop unrolling 的关键是 unroll factor。完全展开适合迭代次数很小且已知的循环；部分展开更常见，例如按 4、8、16 展开。它可以提升 ILP，但也会增大代码体积、寄存器压力，过度展开反而可能导致 i-cache 压力和 spilling。
+
+第三，vectorization 的前提条件通常包括：迭代间没有真实数据依赖；访存尽量连续且对齐；控制流不太复杂；循环 trip count 与向量宽度兼容，或至少能通过 peel/remainder loop 处理尾部元素。编译器常先做 dependence analysis，再决定是否自动向量化。
+
+第四，三者经常配合使用。常见顺序是：先经过 loop interchange / fusion / distribution 等变换得到更规整的循环，再做 tiling；在 tile 内对 innermost loop 做 unrolling 与 vectorization；最后根据目标硬件再决定 parallel/thread binding。很多高性能 kernel 的循环结构就是这些变换的组合。
+
+### 4. 工程权衡 / 性能影响
+tiling 通常能显著改善带宽利用率与 cache hit rate，特别适合 dense linear algebra、卷积和 stencil 类计算；unrolling 更适合短循环或关键 inner loop；vectorization 则常常直接决定 CPU 上是否能接近峰值 SIMD 吞吐。对性能敏感代码而言，这三类优化往往是“必须有”而不是“锦上添花”。
+
+但代价同样明显。tiling 会增加循环层级与索引复杂度；unrolling 会膨胀代码体积并提高寄存器压力；vectorization 受限于数据对齐、alias 分析、控制流复杂度和 ISA 特性。很多时候单独看某个优化似乎合理，但与其他优化叠加后可能出现负收益。
+
+### 5. 常见追问 / 易错点
+第一，不要把 tiling 说成“就是分批计算”。更准确地说，它是为匹配存储层次和数据复用而重组迭代空间。
+
+第二，unrolling 不等于一定更快。若循环体已很大或寄存器很紧张，展开反而可能变慢。
+
+第三，vectorization 也不只是“把 for 改成并行”。它依赖严格的数据依赖分析和目标 ISA 支持，很多有分支、随机访存或跨迭代依赖的循环无法有效向量化。
+
+第四，在 GPU 语境下，很多人误把线程并行等同于 vectorization。两者有关但不等价：线程映射、warp 执行和显式向量指令是不同层面的并行机制。GPU 上与 SIMD vectorization 真正同构的机制，更接近“SIMT 内的向量化访存/计算”，例如 128-bit 宽的 `ld.global.v4.f32` 指令、`float4`/`half8` 封装以及 Tensor Core 上的 WMMA/MMA tile，而不是“多个 thread 一起跑”。
+
+### 6. 实践建议
+分析循环优化时，建议先判断瓶颈属于访存、控制还是算力利用率，再决定优先做 tiling、unrolling 还是 vectorization。若是矩阵/卷积类 kernel，通常先看 tile 与布局；若是短小 inner loop，先看 unroll；若是 CPU 热路径，必须关注是否成功向量化。
+
+不要迷信单一优化，最好结合 profiler、cache miss、SIMD 利用率、寄存器使用和代码尺寸一起看。真正高效的循环优化通常是多种变换协同后的结果，而不是某一个 pass 单独发挥作用。
+
+### 7. 30 秒速答
+- tiling 优化访存层次，unrolling 优化控制开销，vectorization 优化 SIMD 吞吐。
+- 三者经常协同：先 tile 数据复用，再在 innermost loop 上 unroll + vectorize。
+- 易踩的坑是过度 unroll 抬寄存器压力、过大 tile 击穿 cache、vectorize 被依赖阻断。
+- 加分关键词：tile size、unroll factor、SIMD/AVX/NEON、SIMT 向量化、Tensor Core WMMA。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清三种循环优化各自的目标？
+- [ ] 你能不能解释为什么 tile size 太大反而会变慢？
+- [ ] 你能不能举一个矩阵乘 tiling + unroll + vectorize 的组合典型？
+- [ ] 你能不能说出“GPU 上多线程 = vectorization”这种常见混淆？
+
+## Q8. 量化编译中的 PTQ 和 QAT 在编译器层面如何处理？
+
+> 🟡 进阶 · 模型“做了量化”不代表“跑成 int8”。图上一堆 `Q/DQ` 节点没被折叠，权重还是 float，最终累加还在 fp32，那就是白量化。PTQ 和 QAT 给编译器的是不同质量的量化参数，但下沉到整数 kernel 的活儿一点不能少。
+
+### 1. 核心结论
+PTQ（Post-Training Quantization）和 QAT（Quantization-Aware Training）都以低比特推理为目标，但编译器处理方式不同。PTQ 的核心是“模型训练完成后，通过校准和图改写把浮点图转成量化图”；QAT 的核心是“训练阶段就显式模拟量化误差，导出的图中已经携带更稳定的量化参数和量化边界”。因此，编译器面对 PTQ 更多是在做校准结果注入、量化节点插入和后端 lowering；面对 QAT 则更多是在消费已经训练好的 fake quant / scale / zero-point 信息，并把这些语义规范化为后端可执行的整数算子图。
+
+若一句话概括：PTQ 更依赖编译器在部署前补齐量化参数并完成图级量化改写，QAT 更依赖训练图提前把量化分布“学出来”，编译器负责识别、折叠和下沉这些量化语义。两者最终都会落到 quantize/dequantize、整数 kernel、scale 传播与后端特定 lowering，但量化参数的来源和可信度不同。
+
+### 2. 底层原理
+量化编译本质是在保持精度尽量可接受的前提下，把浮点表示映射到更低比特整数表示，并在执行时用 scale、zero-point、clamp、requantization 等机制恢复近似数值语义。编译器关心的不只是“数据变成 int8”，还要保证量化点位置、算子融合、累加精度、中间张量范围和后端指令支持相互匹配。
+
+PTQ 一般先拿浮点模型和一批校准数据，统计激活范围、直方图、KL divergence、min-max 或 percentile 等信息，得到各层或各通道的 scale/zero-point。然后编译器或量化工具在图中插入 Q/DQ 节点，或直接把浮点 op 替换成 quantized op，并进一步做量化参数传播与融合。
+
+QAT 则在训练时引入 fake quant，使前向看起来像经过量化裁剪和舍入，反向通常用近似梯度传递。训练结束后，导出的图往往已经带有更可信的量化区间和量化边界。编译器不必再大规模“猜测”激活范围，而是更多做量化图清理、constant folding、fuse quantized pattern 和后端合法化。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，PTQ 的编译链路通常包括：浮点图导入、插桩或观测、校准数据跑图收集统计、计算 scale/zero-point、图重写为量化图、融合量化算子模式、lower 到目标后端。若是 ONNX/TensorRT/ORT 生态，常见表示是 QDQ 图或显式量化算子图。
+
+第二，QAT 的编译链路通常包括：识别 fake quant / observer 相关节点、提取训练得到的量化参数、把训练态图转换为推理态量化图、删除无关训练节点、合并连续 quant/dequant、将可量化算子替换为目标后端支持的 int8/int4 等实现。QAT 的一个优势是很多量化边界在训练时已被显式约束，部署图更稳定。
+
+第三，编译器在两者中都要处理共同问题：per-tensor vs per-channel 量化、对称 vs 非对称量化、权重量化与激活量化分开处理、bias 保持更高精度、累加通常升到 int32 或更高、requantization 的 scale 合成，以及残差/concat/elementwise 分支上的 scale 对齐。
+
+第四，后端 lowering 非常关键。编译器必须把高层量化语义映射到目标硬件支持的 kernel，例如 int8 GEMM、dp4a、Tensor Core、VNNI、AMX 或 NPU 的专用量化指令。若目标后端不支持某种量化粒度或算子模式，编译器就要插入 dequant 回退，或改写成可支持的量化形态。
+
+### 4. 工程权衡 / 性能影响
+PTQ 的优点是部署成本低，不需要重新训练，适合快速落地；缺点是对校准数据质量高度敏感，遇到激活分布尖锐、长尾明显或注意力类模型时，精度损失可能较大。QAT 的优点是精度通常更稳，尤其适合对量化误差敏感的模型；缺点是训练成本更高、流程更长，而且训练框架、导出图和部署后端必须协同配合。
+
+从编译器角度看，PTQ 更强调 calibration pipeline 和量化插入策略，QAT 更强调识别训练导出的量化语义并避免在导出/优化阶段破坏它。性能上，两者最终是否跑得快，取决于量化图能否真正命中后端整数 kernel，而不是停留在“图上有 int8 节点”这一层面。
+
+### 5. 常见追问 / 易错点
+第一，很多人把 PTQ 简化成“模型转 int8”。实际上其中最难的是量化点选择、统计策略和后端合法化，而不是数据类型字面变化。
+
+第二，QAT 也不是“训练完就天然能部署”。如果导出图、量化参数格式和后端期望不一致，编译器层仍可能出现大量回退或错误融合。
+
+第三，QDQ 图和真正全整数执行不是一回事。图上即便有 Q/DQ，若后端没有把中间模式 fuse 成 int8 kernel，仍可能在 runtime 中频繁量化/反量化，性能收益有限。判断一段 QDQ 图是否真的跑成整数，要看相邻 Q/DQ 是否被消除、MatMul/Conv 的权重是否从 float 变成 int8 常量、累加是否落在 int32 上；只看节点数不能说明问题。
+
+第四，量化优化常与图融合耦合。很多高性能后端要求 Conv/Gemm + Bias + Activation 在量化后仍保持可识别 pattern，否则性能和精度都会受影响。
+
+### 6. 实践建议
+做量化编译时，建议先区分目标是“快速上线”还是“追求精度极限”。前者通常先做 PTQ 并重点验证 calibration 与后端命中率；后者更适合引入 QAT，并提前与编译/部署团队对齐量化表示、导出格式和支持算子列表。
+
+工程实践里不要只看最终 top-1 或 perplexity，还要检查量化图中有多少节点真正下沉为整数 kernel、QDQ 是否被正确折叠、残差分支 scale 是否一致以及是否出现大量 dequant 回退。对编译器来说，量化成功的标志是“精度可接受且后端真正执行了低比特算子”。
+
+### 7. 30 秒速答
+- PTQ 靠校准数据事后注入量化参数，QAT 在训练时就用 fake quant 学好量化边界。
+- 编译器都要做 Q/DQ 折叠、scale 传播、整数 kernel lowering 与后端合法化。
+- 易踩的坑是图上有 Q/DQ 但权重仍是 float、累加在 fp32，根本没走整数 kernel。
+- 加分关键词：QDQ 图、per-channel/per-tensor、INT8 GEMM、`requantize`、dp4a / VNNI / Tensor Core。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清 PTQ 与 QAT 给编译器的量化参数来源差异？
+- [ ] 你能不能解释为什么 QDQ 折叠是判断“真量化”的标志？
+- [ ] 你能不能举一个 PTQ 在 attention/softmax 上精度掉的具体原因？
+- [ ] 你能不能说出“数据类型变 int8 就等于量化加速”这种常见误解？
+
+## Q9. 稀疏化（sparsity）如何被编译器利用？2:4 structured sparsity 的硬件支持？
+
+> 🔴 专家 · 权重里有一半是零，模型却没快——这就是现实。硬件只认特定的稀疏 pattern（比如 Ampere 的 2:4），格式、metadata、kernel 接口一项不对，零就只是普通的零。理解这个边界，你才不会被“理论 50% 稀疏率”骗进坑里。
+
+### 1. 核心结论
+稀疏化只有在“稀疏模式可被表示、可被分析、且目标硬件/运行时真正支持”时，编译器才能把它转化为性能收益。否则即便权重里有大量零，执行时仍可能按稠密路径计算，几乎得不到速度提升。编译器利用 sparsity 的核心手段，是识别稀疏结构、选择合适的数据格式、改写算子实现并将计算映射到支持稀疏跳零的 kernel 或专用硬件单元。
+
+2:4 structured sparsity 是近年较典型的一种半结构化稀疏模式，要求在每连续 4 个元素中有 2 个为零。它的价值在于：相比完全非结构化稀疏，它更容易被硬件识别和加速；相比粗粒度块稀疏，它对模型精度和训练约束通常更容易接受。像 NVIDIA Ampere 及后续部分架构就提供了针对这种模式的稀疏矩阵乘加支持，但前提是权重布局、压缩格式和对齐规则严格满足要求。
+
+### 2. 底层原理
+编译器要利用稀疏性，首先要知道“哪些值恒为零”以及“这些零是否遵循某种模式”。若零分布完全随机，理论乘法数减少了，但实际硬件执行可能因为索引、间接访存和负载不均衡而得不偿失。于是编译器通常更偏好结构化稀疏，如 block sparsity、N:M sparsity、channel/filter 级稀疏等，因为这些模式更容易映射到规则循环和向量化/并行执行。
+
+一旦识别到可利用的稀疏模式，编译器会做两类工作：一类是图级与数据格式改写，把稠密 tensor 变成 CSR/CSC/BSR/ELL 或 N:M 专用压缩表示；另一类是算子级 lowering，把 MatMul/Conv 等替换为 sparse kernel，避免对零元素做无意义运算。
+
+对 2:4 structured sparsity 而言，硬件通常不会支持任意零分布，而要求每个固定宽度组内的非零位置满足约束，并配套元数据编码。编译器需要确保权重满足该模式，并在 codegen 或 kernel 选择阶段调用对应的 sparse GEMM/conv 路径；否则即使模型“看起来很稀疏”，也无法命中硬件加速。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，稀疏模式识别。编译器可以从训练后模型、剪枝后的 IR、量化/稀疏标注或前端框架元数据中获取稀疏信息。关键是区分非结构化、块稀疏、N:M 稀疏以及动态激活稀疏，因为它们对应完全不同的优化机会。
+
+第二，数据表示选择。对通用稀疏矩阵，常用 CSR/CSC/COO/BSR 等格式；对规则块稀疏与 2:4 稀疏，常有更紧凑、硬件感知的压缩格式。编译器需要权衡压缩率、解码成本、随机访问能力和目标 kernel 支持情况。
+
+第三，图与算子改写。若某个 Linear/MatMul 的权重是静态稀疏的，编译器可在编译期完成压缩并替换成 sparse op；若稀疏性来自动态激活，则优化更困难，因为运行时模式变化会影响调度与 load balance。很多编译器因此更容易利用静态权重稀疏，而不是任意动态稀疏。
+
+第四，2:4 sparsity 的硬件支持。以 NVIDIA Ampere 为代表的部分 GPU 架构在 Tensor Core 路径上支持细粒度 structured sparsity，Hopper/Blackwell 后续代际也在 FP8/FP16/BF16 等精度上延续了 2:4 能力；但通常要求权重按特定维度满足 2:4 约束，并由库或编译器生成相应 metadata（如 cuSPARSELt 所消费的 `sparse meta` 向量）。只有在形状、数据类型、布局和库接口都满足条件——例如走 cuSPARSELt / CUTLASS sparse GEMM 或 TensorRT sparse kernel 路径时，才能真正获得稀疏 Tensor Core 加速，否则硬件仍会按稠密 MMA 执行。
+
+第五，为什么“理论稀疏率”不等于“实际加速比”。因为稀疏执行会引入元数据存储、索引解码、访存不连续、线程负载不均与 kernel 限制。编译器真正要做的是让“跳过零计算的收益”大于“处理稀疏格式的额外成本”。
+
+### 4. 工程权衡 / 性能影响
+稀疏化的潜在收益包括更低算力消耗、更小权重存储、更高带宽效率，以及在支持良好的后端上更快的 MatMul/Conv。对大模型推理而言，若关键线性层能命中结构化稀疏加速，收益可能相当可观。
+
+但代价同样大。首先，稀疏模式若不规则，运行时开销可能吞掉理论收益。其次，稀疏训练/剪枝本身可能影响精度，需要额外恢复训练。再次，编译器和后端必须共同支持，否则模型虽然“稀疏”，执行路径仍是稠密的。2:4 这类模式看似限制很多，但恰恰是为了在硬件上得到更可预测的加速。
+
+### 5. 常见追问 / 易错点
+第一，不要把“参数里很多零”直接等同于“推理一定变快”。若没有 sparse kernel 和硬件支持，零只是普通数值。
+
+第二，非结构化稀疏在理论上压缩率高，但在通用硬件上往往最难高效利用；结构化稀疏虽然约束更强，却更容易真正落地。
+
+第三，2:4 sparsity 不是任意 50% 稀疏。它对每组元素的位置分布有严格规则，只有满足模式才可使用对应硬件路径。
+
+第四，稀疏优化通常与量化、布局、batch size 和 kernel 选择耦合，不能孤立评估。
+
+### 6. 实践建议
+若目标后端明确支持某类结构化稀疏，应尽量在训练/剪枝阶段就围绕该模式设计，而不是事后把任意稀疏模型硬塞进编译器。对 2:4 这类模式，训练、导出、压缩格式、库接口和编译器 lowering 最好一起验证。
+
+需要同时评估精度、模型大小、真实延迟和后端命中率，不能只汇报稀疏率。真正有效的稀疏编译优化，应当能回答三个问题：稀疏模式是否规则、后端是否真的执行 sparse kernel、以及元数据与解码开销是否被收益覆盖。
+
+### 7. 30 秒速答
+- 稀疏只有“模式规则 + 后端支持 + 元数据正确”三者齐全才有加速。
+- 2:4 要求每 4 元素中固定 2 个为零，配合 Ampere/Hopper Tensor Core sparse MMA 与 cuSPARSELt 才能命中。
+- 易踩的坑是只看“理论 50% 稀疏率”，权重没按 2:4 重排，硬件仍按稠密执行。
+- 加分关键词：N:M 稀疏、cuSPARSELt、CUTLASS sparse GEMM、sparse meta、structured pruning。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清非结构化稀疏与 2:4 稀疏在硬件上的差异？
+- [ ] 你能不能解释 2:4 sparse Tensor Core 的元数据是什么作用？
+- [ ] 你能不能举一个“剪枝率 50% 但推理不变快”的具体场景？
+- [ ] 你能不能说出“任意 50% 零都能用 2:4 加速”这种典型误解？
+
+## Q10. 编译器的 pass manager 如何工作？top-down vs bottom-up 遍历？
+
+> 🟡 进阶 · 一个编译器有几十上百个 pass，谁先谁后、谁的 analysis 失效了谁要重算，这堆事必须有人管，不然顺序一乱前一个 pass 的前提就被后一个破坏。pass manager 不发明优化，但决定优化能不能正确发挥；调编译器问题十有八九是 pipeline 顺序的事。
+
+### 1. 核心结论
+pass manager 的职责是组织、调度并隔离一系列分析与转换 pass，使编译流水线可配置、可复用、可验证。它不直接“发明优化”，但决定了这些优化以什么顺序、在哪个 IR 层级、在什么分析前提下运行，因此对最终效果和可维护性都非常关键。
+
+top-down 与 bottom-up 通常描述的是 pass 在 IR 层次结构上的遍历和调度视角。top-down 更倾向于从 module/function 这类高层容器往下驱动转换，便于做全局分析、统一决策和大范围重写；bottom-up 更倾向于先处理叶子区域、基本块或局部 op，再逐步把局部结果向上归并，便于利用局部不变量和减少重复处理。二者不是互斥关系，真实编译器里常常混合使用。
+
+### 2. 底层原理
+现代编译器往往包含几十甚至上百个 pass，彼此之间存在依赖、失效关系和作用域差异。若没有 pass manager，优化管线很容易变成“手工串函数”的混乱系统，既难以复用，也难以保证分析结果在变换后是否仍然有效。
+
+pass manager 通常要解决几件事：定义 pass 的作用域（module/function/loop/op）；维护 pass 执行顺序；管理 analysis 的缓存与失效；在必要时运行 verifier；支持嵌套 pipeline、条件执行和调试打印。很多框架还会提供 pass instrumentation，以记录耗时、IR diff、失败点和统计信息。
+
+top-down 与 bottom-up 的选择，是在权衡“全局视野”与“局部效率”。例如做跨函数内联、全局符号分析、全图 fusion 时，往往更适合 top-down；做局部 canonicalization、表达式折叠、树形重写、指令选择时，bottom-up 往往更自然。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，pass 的注册与管线构建。开发者通常先定义 pass 的输入作用域、依赖分析和输出性质，再由 pass manager 按配置组装 pipeline。一个 module pass 下可以嵌套 function pass manager，一个 function pass 内又可能进一步驱动 loop pass，这样形成层级化管理。在具体实现上，LLVM 新 PM 用 `ModulePassManager` + `FunctionPassManager` + `LoopPassManager` 的嵌套结构，而 MLIR 则通过 `OpPassManager` 对任意带 symbol 的 op（典型是 `func.func`、`spirv.module`）嵌套 pipeline，这些都是“层级化 pass manager”的具体形态。
+
+第二，analysis 管理。很多 pass 依赖 dominator tree、alias analysis、shape inference、cost model、liveness 等分析结果。pass manager 会缓存这些 analysis，并在 IR 被修改后按规则失效或重建。若分析失效管理做不好，要么结果错误，要么重复计算导致编译时间暴涨。
+
+第三，遍历策略。top-down 常见于“从高层容器遍历到子节点”，适合先做全局决策再局部执行；bottom-up 常见于“先处理子表达式/子 region，再处理父节点”，适合 pattern rewrite、树重写和局部规范化。比如指令选择、AST 重写、某些 peephole 优化常采用 bottom-up，以保证子节点先稳定后再匹配更大模式。
+
+第四，固定点与重复执行。有些 pass 不会一次就达到最终稳定状态，因此 pass manager 可能支持 repeated pipeline 或 until-fixed-point 机制。例如 canonicalization、CSE、DCE 往往交替运行多轮，直到没有进一步变化。
+
+第五，隔离与可观测性。成熟的 pass manager 往往支持 pass 前后打印 IR、统计改动、捕获异常和最小化失败复现。这些能力对调试编译器非常关键，因为真正出问题时，难点常常不是“哪个 pass 有 bug”，而是“哪个 pass 顺序导致另一个 pass 的前提被破坏”。
+
+### 4. 工程权衡 / 性能影响
+好的 pass manager 设计能显著提升编译器可维护性和优化质量：顺序合理时，前一个 pass 为后一个 pass 创造机会，后一个 pass 又能清理前一个 pass 的副作用，整体效果远强于各自孤立运行。反之，顺序不当会导致分析失效频繁、重复重写、优化互相抵消甚至编译时间失控。
+
+top-down 的优势是有全局视野，适合跨作用域决策；缺点是可能过早做重写，导致局部信息还未充分简化。bottom-up 的优势是局部信息更稳定、模式匹配更精确；缺点是容易缺乏全局最优视野。实际工程中，很多编译器先 top-down 做粗规划，再 bottom-up 做局部清理与合法化。
+
+### 5. 常见追问 / 易错点
+第一，pass manager 不只是“按顺序调用 pass”。analysis 生命周期、失效传播、嵌套作用域和验证机制同样是核心职责。
+
+第二，top-down vs bottom-up 不是价值判断，而是适配不同问题的遍历策略。不能简单说某一种“一定更高级”。
+
+第三，很多 bug 并不出在单个 pass，而出在 pipeline 顺序、analysis 失效声明或 pass 前提条件被破坏。
+
+第四，固定点执行虽然常见，但过度重复也会显著增加编译时间，因此要在优化收益和编译成本间权衡。
+
+### 6. 实践建议
+设计 pass pipeline 时，建议先明确每个 pass 的输入假设、输出保证和依赖分析，再决定其应放在高层还是低层、top-down 还是 bottom-up 路径中。对复杂编译栈，最好显式记录“为什么这个 pass 必须放在这里”，否则后续维护很容易退化为试错式调顺序。
+
+调试 pass manager 时，应优先打开 IR dump、analysis invalidation 和 pass timing 观测，逐步缩小是“某个 pass 错”还是“某个顺序错”。真正稳定的 pipeline，不是 pass 数量最多，而是顺序、作用域和分析管理都可解释、可复现。
+
+### 7. 30 秒速答
+- pass manager 管 pass 顺序、作用域、analysis 缓存与失效、固定点重复执行。
+- top-down 适合全局决策（内联、全图 fusion），bottom-up 适合局部重写（peephole、指令选择）。
+- 易踩的坑是 pipeline 顺序错导致前一个 pass 的前提被后一个 pass 破坏。
+- 加分关键词：LLVM new PM、`OpPassManager`、analysis invalidation、canonicalization + CSE + DCE 固定点。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清 pass manager 与 pass 本身的职责分工？
+- [ ] 你能不能解释 analysis invalidation 没做好会带来什么问题？
+- [ ] 你能不能举一个 top-down 与 bottom-up 各自更合适的优化场景？
+- [ ] 你能不能说出“pipeline 出 bug 一定是某个 pass 写错了”这种典型误判？
+
+## Q11. 如何为新的硬件后端添加编译器支持？以自定义 AI 芯片为例
+
+> 🔴 专家 · 自家流片出来的 AI 芯片，没有编译器支持就只能让用户手写 kernel——那等于没有用户。新增后端不是“写个 codegen”那么轻巧，runtime、profiling、调试器、shape 约束、量化格式全都要补；少哪一层，硬件能力就大概率被埋没。
+
+### 1. 核心结论
+为新的硬件后端添加编译器支持，不是“把 IR 翻译成另一种汇编”这么简单，而是要把该硬件的计算模型、存储层次、并行层次、算子约束、数据类型能力和运行时接口系统化地映射到编译栈中。对自定义 AI 芯片而言，最核心的工作通常是：定义后端能力模型、设计 lowering 路径、提供 kernel/codegen 与 runtime 接口、建立调度/内存规划/性能建模机制，并让上层图编译能稳定命中这些能力。
+
+如果面试要一句话回答，可以说：新增后端需要同时补齐“语义支持、代码生成、运行时执行、性能调优、调试验证”五个层面。没有任何一层是可省略的，因为图能 lower 不代表能跑，能跑也不代表能快，能快也不代表能稳定上线。
+
+### 2. 底层原理
+编译器之所以能支持某个后端，是因为它知道目标硬件有哪些 primitive：例如支持哪些 matmul/conv 指令、是否有片上 SRAM、DMA、向量寄存器、张量核心、同步原语、特殊数据布局和量化能力。编译器需要把高层张量计算逐步映射成这些 primitive，并在映射过程中解决 shape 合法化、切分、调度、buffer 分配和多核并行问题。
+
+对自定义 AI 芯片来说，常见难点不只是 codegen，而是硬件往往有很多非通用约束，例如 tile 大小必须满足某个倍数、某些算子只能在片上完成、DMA 和 compute 需要显式流水、不同核心共享带宽有限、动态 shape 支持弱、量化格式私有等。编译器若不把这些约束前置到 IR 合法化和调度阶段，最终生成的程序即使语义正确，也可能无法高效执行。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，定义后端抽象。需要先明确硬件能力模型：支持的算子集合、数据类型、张量布局、内存层级、并行粒度、同步语义、DMA/compute overlap 模式以及 runtime 调用接口。很多编译器会先用一个 target description 或 dialect/backend interface 来承载这些信息。具体参考系里，MLIR 常见形态是新增一套 target dialect + conversion pass（类似 `nvgpu`、`amdgpu`、`rocdl` 的组织方式），XLA 走的是 `PjRtClient` + backend registration，IREE 则是 HAL executable / target backend，TensorRT 侧对应的是 `IBuilder`/`IPlugin` 扩展点。选定“对齐哪一条参考线”能显著降低前期设计空转成本。
+
+第二，设计 lowering 路径。通常要确定从高层图 IR 经哪些中间层下降到后端专用 IR：例如先做通用图优化，再 lower 到 loop/tensor IR，再做 tile、layout、bufferization，最后进入后端特定 op 或 ISA 级表示。若目标芯片有专用矩阵单元或数据流执行模型，往往需要一个专门 dialect/IR 来保留这些语义。
+
+第三，代码生成与 kernel 库。对于常见算子，可以选择两条路：一条是编译器直接生成低层指令/微码；另一条是调用厂商提供的 kernel library。实际工程中常常混合使用：通用算子走 codegen，复杂高性能算子走手写库。编译器要能在这两种路径间做选择，并保证 ABI、layout 和调度一致。
+
+第四，运行时与内存管理。后端支持不仅是离线编译，还包括 runtime：模型加载、buffer 分配、数据搬运、kernel launch、异步同步、错误处理与 profiling。若硬件需要显式管理片上存储和 DMA，runtime 与编译器的边界设计尤其重要。
+
+第五，调优与验证。新增后端后，必须建立 correctness test、数值对齐、性能基准、IR/代码 dump、模拟器或硬件 trace 分析能力。若没有这些基础设施，后续任何性能问题都很难定位，编译器也无法形成稳定迭代闭环。
+
+第六，以自定义 AI 芯片为例，常见落地顺序是：先支持一小组核心算子和固定 shape；再补齐基本 runtime 与 profiling；再逐步加入动态 shape、量化、稀疏、图融合和自动调度。直接一口气支持完整框架通常风险极高。
+
+### 4. 工程权衡 / 性能影响
+支持新后端最大的收益是能让上层框架模型真正跑上自家芯片，并通过图融合、内存规划和定制 codegen 发挥硬件差异化优势。对 AI 芯片公司来说，这往往比单点手写 kernel 更关键，因为没有编译器支持，硬件能力很难大规模被用户消费。
+
+代价则体现在全栈复杂度。你不仅要维护 codegen，还要维护 runtime、工具链、调试器、性能分析、模型兼容性和版本演进。若后端抽象设计过早绑定当前硬件细节，后续芯片迭代会非常痛苦；若抽象过于泛化，又可能失去性能。新增后端的真正难点，常常是“抽象边界”而不是单次代码实现。
+
+### 5. 常见追问 / 易错点
+第一，不要把后端支持等同于“写一个 kernel”。真正的后端支持必须覆盖图级映射、内存管理、runtime、调试和性能优化。
+
+第二，也不要一上来就追求支持全部算子。通常应该先围绕最重要的算子闭环，确保关键模型能跑通，再逐步扩展长尾兼容性。
+
+第三，很多项目失败不是因为 codegen 做不出来，而是 runtime 和 profiling 太弱，导致性能问题无法定位、线上稳定性无法保证。
+
+第四，自定义芯片常常有很强的 shape、layout、batch 或量化约束，编译器必须把这些约束显式暴露给上层，而不是等到运行时报错。
+
+### 6. 实践建议
+为新后端立项时，建议先选定一组代表性模型和关键算子，把它们作为编译器设计的验收标准，而不是泛泛地说“支持 transformer/CNN”。这样更容易倒推出需要哪些 IR、哪些 runtime 能力和哪些调优接口。
+
+工程实践里应优先补齐三类基础设施：可解释的 IR dump、可重复的正确性基准、可量化的性能 profiling。对自定义 AI 芯片而言，只有当“能编、能跑、能测、能调”四件事都成立时，后端支持才算真正进入可交付状态。
+
+### 7. 30 秒速答
+- 新后端要补齐语义支持、codegen、runtime、调优、调试验证五层，缺一不可。
+- 关键是把硬件 primitive、片上 SRAM/DMA、量化与布局约束建模进 target dialect 与 lowering pipeline。
+- 易踩的坑是只做 codegen 忽略 runtime/profiler，性能问题无从定位、用户无法落地。
+- 加分关键词：target dialect、HAL executable、`PjRtClient`、bufferization、自动调度 + 手写 kernel 混合。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清“能 lower” “能跑” “能快”三件事的差异？
+- [ ] 你能不能解释为什么 runtime 与 profiler 是后端支持的强约束？
+- [ ] 你能不能举一个自定义 AI 芯片落地的“最小闭环”范围？
+- [ ] 你能不能说出“写完 codegen 就算支持后端”这种典型低估？
+
+## Q12. Apache TVM vs MLIR vs TorchDynamo，技术路线差异？
+
+> 🟡 进阶 · 这三个名字经常被并列写在简历上，但它们根本不在一个层面：TorchDynamo 在前端抓图，MLIR 在中间提供 IR 基础设施，TVM 是端到端编译栈。把它们当同类比谁更牛，面试官一听就知道你层次感没建立起来。
+
+### 1. 核心结论
+TVM、MLIR、TorchDynamo 解决的问题处在不同层级，不能简单横向视为“谁替代谁”。TVM 更像一套端到端深度学习编译器，强调从高层计算图/张量表达一路到调度搜索、代码生成与多后端部署；MLIR 更像通用的多层 IR 编译基础设施，强调如何组织 dialect、lowering 和 pass，而不预设具体深度学习工作流；TorchDynamo 则是 PyTorch 2.x 编译栈中的前端图捕获器，重点是从 Python eager 执行中抽取可编译 graph，而不是独立完成后端代码生成。
+
+因此，三者的技术路线差异可以概括为：TVM 走“完整编译器产品路线”，MLIR 走“通用 IR 基础设施路线”，TorchDynamo 走“动态图前端捕获与图边界抽取路线”。面试中如果把 TorchDynamo 和 TVM/MLIR并列成同层系统，会显得层次感不够准确。
+
+### 2. 底层原理
+TVM 的核心思想是把模型表示、调度优化和后端代码生成统一起来。历史上它围绕 Relay、TE、TIR、auto-scheduler、MetaSchedule 等组件构建，从图级融合、算子 schedule、自动调优到多后端 codegen 都有明确链路。也就是说，TVM 不只是“抓图”，而是试图提供完整的 lowering 与 deployment 基础设施。在 TVM Unity 路线里，高层图 IR 已经由新的 Relax 统一替代 Relay，与 TIR/MetaSchedule 联动更紧密，面试若被追问“现在 TVM 前端是什么”，答 Relax 比答 Relay 更贴近现状。
+
+MLIR 的核心思想则是“多层表示 + 统一基础设施”。它不规定你必须如何表示神经网络，也不要求必须生成某类后端代码；它提供的是 operation/dialect/pass/pattern rewrite 这些通用机制，让不同项目在不同抽象层表达语义并逐步 lowering。TensorFlow、IREE、Torch-MLIR 等都可以建立在 MLIR 上，但 MLIR 本身不是某个特定框架的完整编译器产品。
+
+TorchDynamo 则站在 PyTorch eager runtime 的入口处，通过 frame evaluation hook 截获 Python 执行，把一段段 Tensor 运算抽取成 FX graph，再交给 AOTAutograd、Inductor 或其他 backend。它的价值在于“尽量少改用户代码就把动态图切成可编译区域”，而不是亲自定义统一 IR 层次或后端 ISA。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，抽象层不同。TVM 有自己的高层图 IR 与低层张量/循环 IR，并包含调度搜索和后端 codegen；MLIR 提供的是容器与转换框架，具体 dialect 与后端路径由上层项目定义；TorchDynamo 主要输出 FX graph，更多承担“前端捕获”职责。
+
+第二，问题边界不同。TVM 关注“如何把模型优化并部署到各种硬件”；MLIR 关注“如何优雅组织多层 IR 和 pass”；TorchDynamo 关注“如何从 Python 动态执行中安全抽出图而尽量减少 graph break”。因此 TVM 偏 deployment/compiler stack，MLIR 偏 compiler infrastructure，TorchDynamo 偏 front-end tracing/capture。
+
+第三，优化抓手不同。TVM 的强项在于 schedule、tensor program、auto-tuning、多后端 lowering；MLIR 的强项在于 dialect conversion、pattern rewrite、跨层语义保留；TorchDynamo 的强项在于低侵入地捕获 PyTorch 程序，并把后续优化机会交给 Inductor 等后端。
+
+第四，生态嵌入方式不同。TVM 常以独立编译部署栈存在；MLIR 常被嵌入到其他编译器项目内部；TorchDynamo 则深度嵌入 PyTorch runtime，本身离不开后续编译后端协作。
+
+### 4. 工程权衡 / 性能影响
+TVM 的优势是体系较完整，适合围绕多后端部署与算子/调度优化构建全链路；代价是系统学习成本高，接入现有框架时常涉及额外导入/导出与后端适配工作。MLIR 的优势是抽象统一、可扩展性强、适合构建长期可演进的编译器架构；代价是它本身不直接给你完整产品，需要大量工程补齐。TorchDynamo 的优势是对 PyTorch 用户侵入小，能在保留动态图体验的同时获得编译机会；代价是依赖 graph capture 成功率，且必须配合后端才能体现最终性能。
+
+性能上，TorchDynamo 本身不直接“加速”，它只是为后续编译创造边界；MLIR 本身也不直接等于性能，它提供更好的表达与优化基础；TVM 则更直接地把表达、调度和 codegen 与最终性能联系起来。回答这题时，应把“能不能加速”和“系统处在编译链路哪一层”分开说明。
+
+### 5. 常见追问 / 易错点
+第一，不要把 MLIR 说成 TVM 的直接竞品。两者有交集，但一个更偏基础设施，一个更偏完整编译器栈。
+
+第二，也不要把 TorchDynamo 说成“PyTorch 的 TVM”。它更像前端 graph extractor，而不是完整部署编译器。
+
+第三，TVM 也不是只做图优化，它的重要竞争力恰恰在 schedule 与后端 codegen。
+
+第四，MLIR 能否带来性能提升，取决于建立在其上的具体 dialect、pass 和后端实现，而不是因为“用了 MLIR”就自然更快。
+
+### 6. 实践建议
+若面试考察技术路线，建议按“前端捕获层、IR 基础设施层、端到端编译层”三个维度回答，把 TorchDynamo、MLIR、TVM 分别放到更准确的位置。这样能体现你理解的是编译栈分层，而不是 API 名称比较。
+
+工程实践里，若目标是快速融入 PyTorch 编译链，应先理解 TorchDynamo 的 graph break 与 backend 接口；若要设计长期演进的编译器架构，应重点学习 MLIR 的 dialect/pass 机制；若目标是端到端模型部署和自动调优，则更值得深入 TVM 的 TIR/MetaSchedule/后端路线。
+
+### 7. 30 秒速答
+- TVM 是端到端编译栈，MLIR 是通用 IR 基础设施，TorchDynamo 是 PyTorch 前端 graph 捕获器。
+- 三者分别处于编译链路的不同层：部署/优化、IR 容器、前端入口。
+- 易踩的坑是把它们当作同层产品比较，忽略 MLIR 不直接出性能、Dynamo 不直接出 codegen。
+- 加分关键词：TVM Unity（Relax）、MetaSchedule、TensorIR、TorchDynamo + Inductor、Torch-MLIR。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清三者各自处在编译栈哪一层？
+- [ ] 你能不能解释 MLIR 为什么不直接等于性能提升？
+- [ ] 你能不能举一个“TorchDynamo 抓到图但 Inductor 没加速”的具体原因？
+- [ ] 你能不能说出“MLIR 是 TVM 的下一代”这种典型外行误判？
+
+## Q13. 编译时优化和运行时优化的权衡？AOT vs JIT？
+
+> 🟡 进阶 · 在线服务最忌“第一个请求卡 30 秒”，所以 AOT 把编译成本前移；但 AOT 看不到真实 shape 和热点路径，做不出极致专门化，于是又有 JIT 来补。理解这条权衡线，你才知道 TensorRT engine、`torch.compile`、CUDA graph 各自在解决什么问题。
+
+### 1. 核心结论
+编译时优化和运行时优化的核心差异，在于“你在做决策时掌握多少真实信息”与“你愿意为这些信息支付多少延迟成本”。AOT（Ahead-of-Time）倾向于在部署前完成大部分优化与代码生成，优点是启动快、可复现、易治理；JIT（Just-in-Time）倾向于在运行时基于真实输入、真实硬件状态和热点路径做专门化，优点是更灵活、更能利用动态信息。
+
+因此，AOT vs JIT 不是谁绝对更先进，而是系统在启动成本、动态适应性、可调试性、缓存复用和线上稳定性之间的取舍。大多数现代系统并不会只选一端，而是采用混合策略：静态部分 AOT，热点或动态部分 JIT。
+
+### 2. 底层原理
+编译器做优化时最希望知道 shape、dtype、常量参数、控制流分支概率、硬件特征、热点路径和运行时数据分布。AOT 在编译时往往只能看到部分静态信息，因此更依赖保守假设和泛化代码；JIT 则能在真实执行时利用具体 shape、常量折叠机会、profile 信息和目标设备状态做 specialization。
+
+AOT 的典型路径是：模型导出后，在离线环境完成图优化、算子选择、代码生成、序列化与部署。这样上线时只需加载结果即可执行。JIT 的典型路径是：程序第一次运行某段代码时先解释或较慢执行，同时收集 profile；确认其成为热点后，再触发编译和优化，并把编译结果缓存起来供后续复用。
+
+这也是为什么 JIT 常能做更激进的专门化，而 AOT 更适合标准化交付。前者知道得更多，但编译成本出现在用户请求路径上；后者知道得更少，但能把编译成本前移并更好控制上线流程。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，AOT 的关键机制。常见包括离线 graph optimization、静态 shape 或 profile shape 下的 codegen、多版本 binary 生成、部署包序列化和编译缓存打包。它通常依赖较稳定的模型签名和目标硬件环境。
+
+第二，JIT 的关键机制。常见包括热点检测、trace/profile 收集、运行时 specialization、guard 检查、deoptimization、编译缓存和 fallback 路径。为了保证正确性，JIT 往往要在编译结果外附带 guard 条件，例如 shape、dtype、常量值或控制流假设一旦失效，就回退或重新编译。
+
+第三，混合策略。现实系统中常见做法是：先 AOT 一个保守版本保证可用，再对热点路径 JIT 出更专门化版本；或者离线准备多个 profile/bucket，在运行时按输入选择最接近的已编译版本，必要时再补充 JIT。TensorRT profile、XLA 编译缓存、JVM tiered compilation 都能体现这种思路。落到深度学习栈里的典型对照：TensorRT engine、ONNX Runtime session、`torch.export` + AOTInductor 产物偏 AOT；`torch.compile`、XLA 的首包编译、JAX `jit` 首次 trace 偏 JIT；而 vLLM/SGLang 在服务启动时 capture CUDA graph、按 batch-size bucket 缓存，则是典型的“AOT 风格的 runtime specialization”。
+
+第四，运行时优化并不只等于 JIT codegen。它还包括 runtime kernel selection、dynamic batching、memory planner、自适应并行策略和执行调度。也就是说，哪怕代码本身是 AOT 生成的，运行时仍可能继续做重要优化。
+
+### 4. 工程权衡 / 性能影响
+AOT 的优势是启动延迟低、行为可预测、部署治理简单、易做离线验收，特别适合服务化场景和对冷启动敏感的环境。缺点是泛化代码较多，对动态 shape、动态控制流或长尾输入分布的适应性较弱。
+
+JIT 的优势是可以针对真实 workload 做 specialization，常常能在热点路径上获得更好性能；缺点是首次请求延迟高、编译抖动明显、缓存管理复杂、调试链路更长。若请求分布分散、热点不稳定或运行环境短命，JIT 收益可能覆盖不了其成本。
+
+### 5. 常见追问 / 易错点
+第一，AOT 不代表运行时完全没有优化，JIT 也不代表所有内容都临时编译。很多系统实际上是混合式。
+
+第二，JIT 的性能优势通常是稳态优势，不一定包含冷启动。若只拿 warm benchmark 比较，容易忽略线上真实体验。
+
+第三，AOT 生成多个 profile/bucket 版本已经在向 JIT 的动态适配靠近，只是把候选版本前移准备好了。
+
+第四，很多所谓“JIT 不稳定”，根因其实是缓存命中差、guard 失效率高或输入分布过散，并非 JIT 思路本身有问题。
+
+### 6. 实践建议
+做架构选择时，建议先明确业务最在意的是冷启动、稳态吞吐、动态适应性还是可治理性。若服务对首包延迟和上线可控性要求极高，优先 AOT；若 workload 热点明显、形状集中且执行生命周期长，JIT 往往更值得。
+
+最好分开测量 cold-start、first-run、warm-run、cache-hit 和 cache-miss 几种场景，而不是只报一个平均值。只有把 AOT 与 JIT 的时间分布拆开，才能真正做出合理权衡。
+
+### 7. 30 秒速答
+- AOT 把编译成本前移，启动快、行为可控；JIT 拿真实信息做 specialization，稳态更优。
+- 关键区分点是“做决策时掌握多少信息”和“是否愿意把编译成本压在请求路径上”。
+- 易踩的坑是只比 warm-run，忽略冷启动与 guard miss；多数生产系统其实是 AOT+JIT 混合。
+- 加分关键词：TensorRT engine、AOTInductor、`torch.compile` first-run、XLA persistent cache、CUDA graph capture。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清 AOT 与 JIT 在“信息可用性”上的核心差异？
+- [ ] 你能不能解释 guard 在 JIT 中的角色？
+- [ ] 你能不能举一个“AOT 多 profile + JIT 补丁”混合策略的实际系统？
+- [ ] 你能不能说出“JIT 一定比 AOT 快”这种典型片面结论？
+
+## Q14. 如何处理编译器的编译时间过长问题？缓存策略？
+
+> 🟡 进阶 · 用户抱怨“编译太慢”，十次有九次根因不是单次编译重，而是 shape 一变就重 trace、guard 一失效就重编、缓存 key 设计太细命中率为零。会设计 `cache key` 和 bucket 化，比让某个 pass 提速更管用。
+
+### 1. 核心结论
+编译时间过长通常不是单点问题，而是“图太碎/太动态、pipeline 太重、重复编译太多、调优预算过高、缓存命中太差”共同造成的。处理思路也不应只靠“少做几个 pass”，而要从减少重复工作、缩小编译范围、分层缓存、延迟重优化和提高缓存命中率几方面同时入手。
+
+缓存策略是其中最关键的一环，因为很多编译工作具有强重复性：同一 graph、同一 shape bucket、同一 kernel 配置、同一 target 编译结果会被反复用到。一个成熟编译器体系往往会同时维护 IR 级缓存、编译产物缓存、autotune 结果缓存和运行时 kernel cache，而不是只有单一“编译后文件缓存”。
+
+### 2. 底层原理
+编译时间主要消耗在几个阶段：前端 graph capture / tracing、IR canonicalization 与优化、多轮分析、自动调优、后端 codegen、底层编译器调用以及序列化/加载。若输入 shape 高频变化、graph break 很多、动态 guard 频繁失效，就会触发重复 trace 与重复编译，导致时间呈指数式膨胀。
+
+因此，降低编译时间的核心不是单纯让一次编译更快，还包括减少“一次又一次重新编译”的发生。对线上系统而言，缓存命中率往往比单次 codegen 速度更重要，因为真正伤害用户体验的常是 cache miss 风暴。
+
+编译缓存的本质是给某个编译结果建立稳定 key。key 可能由 graph 哈希、IR 版本、shape/dtype 签名、target triple、硬件特征、编译选项、量化配置、后端版本等组成。key 设计过粗会错用缓存，过细又会导致命中率太低。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，减少编译工作量。常见做法包括：把动态 shape bucket 化、限制不必要的 specialization、减少 graph break、拆分超大图为稳定热点子图、降低 autotune 预算、把昂贵 pass 仅用于热点路径。这样可以从源头减少需要重新编译的工作集。
+
+第二，分层缓存。常见缓存层次包括：前端 trace/concrete function 缓存、IR canonical form 缓存、lowered kernel/cache key 缓存、底层二进制缓存、autotune best config 缓存。越靠前的缓存越能减少后续整条 pipeline 的重复开销。
+
+第三，本地与持久化缓存。进程内内存缓存适合短期高频复用；磁盘缓存适合跨进程、跨重启复用；分布式缓存适合大规模服务集群共享已编译结果。实际工程中常把三者结合，并对缓存条目附带版本戳与失效策略。
+
+第四，缓存 key 设计。通常至少应包含：图结构/IR 哈希、输入签名、目标设备、编译器版本、优化级别、量化/稀疏配置、后端库版本等。若系统支持动态 profile/bucket，则 key 还需要与 bucket 或 guard 条件对应，而不是为每个细粒度 shape 单独建条目。
+
+第五，增量编译与延迟优化。若图只局部变化，可只重编译受影响子图；若请求处于冷路径，可先用较保守或低优化级别版本快速返回，再在后台生成更优版本。这样能把用户可感知延迟与最重优化工作解耦。
+
+### 4. 工程权衡 / 性能影响
+更激进的缓存能显著降低冷启动和重复编译成本，尤其在长生命周期服务与形状集中 workload 中收益很大；但代价是缓存一致性、磁盘占用、版本管理和错误定位复杂度上升。缓存错用比缓存未命中更危险，因为前者可能产生静默错误。
+
+降低编译时间还常与稳态性能发生冲突。比如减少 autotune、缩短 pipeline、放松 specialization 确实能加快编译，但也可能损失峰值性能。往往需要分层：冷路径先快，热点再慢慢优化到更高性能版本。
+
+### 5. 常见追问 / 易错点
+第一，缓存不是“只要 key 相同就直接复用”。还要考虑编译器版本、驱动、硬件 stepping、后端库变化，否则兼容性可能出问题。
+
+第二，shape 完全精确匹配常导致缓存碎片化。对动态 workload，更现实的办法往往是 bucket、profile 或 guard 范围复用。
+
+第三，很多“编译太慢”问题其实根因是重复 trace/compile，而不是单次 codegen 本身太重。
+
+第四，磁盘缓存并不能解决所有问题。若 graph 本身高度动态或 guard 高频失效，缓存仍会不断 miss。
+
+### 6. 实践建议
+排查编译时间时，建议先把时间拆到各阶段：捕获、优化、调优、codegen、底层编译、加载、缓存命中率。只有定位到主要耗时点，才能判断该缩减 pipeline、调 key、做 bucket 还是引入后台编译。
+
+可优先落地三件事：稳定输入签名、设计合理缓存 key、把 autotune/高优化级别限制在真正热点路径。一个可上线的编译系统，往往不是“每次都编得最好”，而是“尽量少重复编，并把昂贵优化留给最值得的场景”。
+
+具体到 PyTorch 2.x 栈，排查编译时间与缓存命中，常用的可观测入口包括：`TORCHINDUCTOR_CACHE_DIR` / `TORCHINDUCTOR_FX_GRAPH_CACHE=1` 控制 Inductor 磁盘缓存与 FX graph cache；`TORCH_LOGS=recompiles,graph_breaks` 定位重复编译源头；`torch._dynamo.reset()` 可在诊断时强制清空 cache；XLA 侧对应的是 `XLA_FLAGS=--xla_dump_to=...` 与 persistent compilation cache 目录。把这些旋钮与缓存 key 组成对起来看，才能回答“到底是什么在反复触发重编”。
+
+### 7. 30 秒速答
+- 编译慢往往是“重复编 + 缓存 miss + 调优预算高”叠加，不是单次 codegen 慢。
+- 关键是 bucket 化 shape、设计稳定 cache key、分层缓存（IR/产物/autotune）。
+- 易踩的坑是 key 过细导致碎片化，或 key 过粗导致跨版本错用。
+- 加分关键词：FX graph cache、`TORCHINDUCTOR_FX_GRAPH_CACHE`、autotune cache、persistent compilation cache、shape bucket。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清“单次编译慢”与“重复编译多”的区别？
+- [ ] 你能不能解释 cache key 应该包含哪些字段才能避免错用？
+- [ ] 你能不能举一个 shape bucket 化解决重编风暴的具体场景？
+- [ ] 你能不能说出“开磁盘缓存就一定能加速冷启动”这种典型简化？
+
+## Q15. operator decomposing 和 operator fusion 的边界在哪里？
+
+> 🔴 专家 · 编译器干的事看上去很拧巴：先把高层 op 拆成一堆小原语（方便统一处理），再把这些小原语合回去（方便后端跑得快）。拆早了 `FlashAttention` 这种 pattern 就识别不出来了；不拆又支持不了那么多长尾 op。这条边界在哪，决定了你的图能不能命中真正的高性能 kernel。
+
+### 1. 核心结论
+operator decomposing 与 operator fusion 看似方向相反：前者把高层算子拆成更基础的原语，后者把多个原语重新合并成更大的执行单元。但两者并不矛盾，它们服务于编译链路中的不同阶段。decomposing 主要是为了统一语义、扩大可处理算子覆盖面、暴露优化机会；fusion 主要是为了减少中间结果、降低调度与访存开销、匹配高性能 kernel 或后端 pattern。
+
+它们的边界在于“何时拆开更利于后续分析，何时保留/合并更利于后端执行”。如果一个高层 op 拆开后能暴露更多通用优化和 lowering 路径，就值得先分解；如果分解后反而破坏了后端可识别 pattern，或者导致本来可以整体高效执行的结构被切碎，就不该过度分解。
+
+### 2. 底层原理
+高层框架中的算子往往语义丰富但种类繁多。编译器若逐个为所有高层 op 写完整后端支持，维护成本极高。因此常先通过 decomposition 把复杂 op 转成一组更基础、覆盖面更广的 primitives，例如把某些归一化、激活或特殊广播操作拆成 add/mul/reduce/reshape 等组合。
+
+但如果只停留在 decomposition，执行图就可能变得很碎，产生大量小 kernel、中间张量和访存往返。于是编译器又会在较低层看到这些基础 op 后，通过 fusion 把可一起执行的子图重新聚成更少、更大的内核或 pattern。也就是说，编译器常常先“拆”为了统一，再“合”为了高效。
+
+边界问题的核心在于后端能力。若后端有成熟的 fused kernel，例如 Conv+Bias+Activation、FlashAttention、LayerNorm、MatMul epilogue，那么过早或过度分解会让这些 pattern 难以恢复；反之，若高层 op 太黑盒，保留不拆反而阻碍通用优化和跨后端移植。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，decomposition 的典型作用。它用于把长尾高层 op 收敛到更小的算子基集，便于统一形状推导、类型检查、自动微分、lowering 和后端适配。很多编译栈会维护 decomposition table，让特定高层 op 优先展开为基础原语。PyTorch 2.x 里的典型落点是 `torch._decomp` 维护的 decomposition table 与 PrimTorch 的 `prims` 基础算子集：上游 ATen op 在进 Inductor 之前会按表展开成一组 prim，再交给后端 codegen，这是“先拆后融”工作流的教科书实现。
+
+第二，fusion 的典型作用。它用于在 loop level 或 pattern level 上把 pointwise、broadcast、reduction 周边操作合并，或者把经典子图替换成单个 fused op / kernel。fusion 可以是图模式融合，也可以是循环层融合、算子融合（kernel fusion）或 epilogue fusion。
+
+第三，边界判断标准。主要看四点：是否能暴露更多通用优化机会；是否会破坏后端现成高性能模式；是否会增加中间张量与调度开销；是否有足够信息在后续阶段把它重新识别回来。若分解后很难恢复 pattern，就要更谨慎。
+
+第四，常见工作流是“有限分解 + 有选择融合”。即先把真正难支持、但可安全展开的 op 分解；对已经与后端强绑定的高价值模式，尽量保留语义边界或在后续 pass 中确保能稳定重建。许多高性能编译器都在这两者间做 carefully chosen tradeoff，而不是一味越拆越细或越融越大。
+
+### 4. 工程权衡 / 性能影响
+decomposing 的优势是降低实现复杂度、统一 IR 语义、方便跨后端支持；缺点是可能丢失高层语义、拉长图、增加中间结果。fusion 的优势是提高运行效率、减少访存和 launch overhead；缺点是会让 IR 更难读、调试更难、并可能因过大 kernel 带来寄存器压力或阻碍库调用。
+
+性能上，最佳边界往往不是“最小原语集”也不是“最大 fused graph”，而是让编译器在合适层次保留恰当语义。尤其在 Transformer、卷积块和量化图中，边界选错常会让本可高效执行的模式退化为一串小操作。
+
+### 5. 常见追问 / 易错点
+第一，不要把 decomposition 理解为“越基础越好”。过度分解可能让后端失去识别高价值模式的机会。
+
+第二，也不要把 fusion 理解为“节点越少越好”。过度融合会导致 codegen 困难、寄存器压力上升或阻碍专用库调用。
+
+第三，decomposition 和 fusion 并不是互斥 pass，很多编译器恰恰会先分解再融合。
+
+第四，边界选择通常与后端能力强相关。同一个前端图，对 GPU、CPU、NPU 的最佳边界可能完全不同。
+
+### 6. 实践建议
+回答这类问题时，建议把边界定义成“语义保留与执行效率之间的平衡点”，而不是静态规则。只要能说明何时该为统一表示而拆，何时该为后端效率而合，通常就比较到位。
+
+工程实践里最好维护明确的 decomposition whitelist/blacklist 与 fusion pattern 列表，并结合 profiler 验证某个边界是否真的提升了端到端性能。真正有效的边界往往是后端驱动的，而不是纯粹出于 IR 美观考虑。
+
+### 7. 30 秒速答
+- decomposition 把高层 op 拆成基础原语统一处理，fusion 再把原语合回去匹配后端 kernel。
+- 边界标准：拆开能否暴露更多优化、合并能否命中后端高性能 pattern。
+- 易踩的坑是过度分解导致 FlashAttention 等模式识别不出来，或过度融合阻碍库调用。
+- 加分关键词：`torch._decomp`、PrimTorch prims、epilogue fusion、pattern match、FlashAttention。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清 decomposing 与 fusion 各自的目标？
+- [ ] 你能不能解释“先拆后融”工作流为什么不矛盾？
+- [ ] 你能不能举一个 LayerNorm 或 Attention 被过度分解导致性能下降的场景？
+- [ ] 你能不能说出“节点越少一定越快”这种典型直觉错误？
+
+## Q16. 编译器如何处理 control flow（if/while）？执行轨迹捕获（tracing）vs 符号执行（symbolic execution）？
+
+> 🟡 进阶 · `if x.sum() > 0` 这种数据相关分支，tracing 一跑只记录一条路径，下次 `x` 变了就走错；想保留语义就得在 IR 里搞 `IfOp`/`WhileOp` 这种一等公民，但实现复杂度成倍上升。控制流是动态图编译永远的硬骨头，guard、graph break、symbolic 都是它逼出来的。
+
+### 1. 核心结论
+编译器处理 control flow 的核心难点，是在“保留分支/循环语义”与“把程序转换成可优化图表示”之间找到平衡。`if/while` 这类结构若完全依赖运行时数据，就不能简单按一次样例执行结果固定下来；否则编出来的图只适用于那次路径。于是系统通常在 tracing、symbolic execution、显式 IR control-flow op、guard 与 fallback 之间做选择。
+
+tracing 的强项是简单直接，按一次真实执行路径记录下经过的算子；缺点是数据相关控制流很容易被“路径固化”。symbolic execution 或更广义的符号化图构建，则尝试保留条件表达式和循环结构本身，把 `if/while` 编码进 IR 中，代价是实现复杂、对静态分析能力要求更高。两者没有绝对优劣，关键看框架语义和目标优化层次。
+
+### 2. 底层原理
+若程序里有 `if x.sum() > 0:` 或 `while len(seq) < n:` 这类控制流，编译器需要回答两个问题：第一，条件是否在编译时可知；第二，循环次数是否可静态界定。若条件可常量化或循环边界已知，就能直接展开或删掉死分支；若依赖运行时张量值，则必须保留为图中的 control-flow 节点，或在 tracing 系统里借助 guard/graph break/fallback 处理。
+
+tracing 的做法通常是：给一组样例输入跑一次程序，记录实际经过的 op 序列。如果这次执行走了 then branch，就只记录 then 路径；while 循环也只记录那次迭代次数对应的展开结果。这种方式对纯张量直线代码很有效，但面对数据相关分支时会丢失泛化性。
+
+symbolic execution 或符号化建图则试图把条件和循环当成 IR 的一等公民，例如生成 `IfOp`、`WhileOp`、`cond/body` region 或带 merge/phi 语义的控制流图。这样编译器可在后续 pass 中继续分析、变换甚至部分展开，但要求 IR 与 analysis 能表达这些语义。主流系统中可以直接点名的参照物包括：XLA HLO 的 `conditional` / `while`、MLIR 的 `scf.if` / `scf.while`、TensorFlow 图层的 `tf.cond` / `tf.while_loop`，以及 PyTorch 2.x 在 `torch.cond` / `torch._higher_order_ops` 下新增的高阶控制流算子，它们都是把控制流“显式留在 IR 里”的具体体现。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，tracing 路线。典型流程是按样例执行收集 op trace，适用于控制流稳定、路径基本固定的模型。若条件依赖 Python 值或静态超参数，tracing 往往问题不大；若条件依赖张量数据，就可能出现“trace 只覆盖一条路径”的问题。
+
+第二，symbolic control flow 路线。编译器在 IR 中显式保留 `if/while`，并为不同分支建立 region/block、为循环建立 loop-carried state 和退出条件。这样后续就能做分支简化、循环不变式外提、部分展开、死分支删除和 shape/类型传播等优化。
+
+第三，guard 与 fallback。很多现代动态图编译器并不会完全二选一，而是先 trace 出一条常见路径，再附加 guard 条件；若运行时 guard 失效，就回退到 eager 或重新编译。这样能在简单路径上获得 tracing 的低成本，又避免彻底错误地泛化控制流。
+
+第四，graph break。若某段 control flow 太动态、含 Python 副作用或难以符号化，编译器可能选择在该处终止图捕获，把前后两段分别编译，中间留给原始 runtime 执行。这不是“失败”，而是一种常见的保守策略。
+
+第五，循环处理。对于 `while`，编译器尤其关注 loop-carried variable、终止条件、最大迭代次数和是否可做 partial unroll。若循环次数由输入 shape 或张量值决定，通常需要显式 loop IR；若迭代次数固定且较小，也可能直接展开。
+
+### 4. 工程权衡 / 性能影响
+tracing 的优势是实现相对简单、对现有动态图侵入小、图生成速度快；缺点是遇到数据相关控制流容易失真，可能需要大量 guard、retrace 或 graph break。symbolic execution/显式 control-flow IR 的优势是语义更完整、泛化性更强，适合复杂图优化；缺点是实现难度高，分析与 lowering 成本也更大。
+
+性能上，若控制流高度稳定，tracing 常能获得很高收益，因为生成的是线性热点路径；若控制流变化大，频繁 retrace 和 guard miss 会吞掉收益。显式控制流 IR 则更适合表达动态模型，但后端是否真的能高效执行 `if/while` 仍取决于后端 runtime 和代码生成能力。
+
+### 5. 常见追问 / 易错点
+第一，不要把 tracing 说成“错误做法”。它在直线张量代码和稳定路径模型中非常有效，只是对动态 control flow 有天然局限。
+
+第二，symbolic execution 也不等于“万能”。即使 IR 能表达 `if/while`，后续优化、shape 推导和后端 lowering 仍可能非常复杂。
+
+第三，很多系统其实采用混合策略：能符号化的保留 control-flow op，难处理的用 guard、graph break 或 fallback。
+
+第四，处理 control flow 的真正难点常常不是语法本身，而是 state、side effect、alias 和 loop-carried dependency 如何在 IR 中正确表达。
+
+### 6. 实践建议
+分析控制流编译问题时，建议先区分三类情况：编译时可知的静态分支、运行时张量相关分支、带副作用的 Python 级控制流。三类问题适合的编译策略完全不同，不能混为一谈。
+
+工程实践里若使用 tracing 编译器，应尽量让热点路径控制流稳定，并监控 retrace、guard miss 和 graph break；若设计新的编译 IR，则应尽早把 `if/while` 的 region、状态传递和副作用建模清楚，否则后续优化和后端支持都会非常脆弱。
+
+### 7. 30 秒速答
+- tracing 按一次执行记录路径，便宜但易被数据相关分支固化。
+- symbolic execution / 显式 control-flow IR 把 if/while 留在 IR 里，泛化但实现复杂。
+- 易踩的坑是只跑一次 trace 就上线，guard 一失效路径就走错。
+- 加分关键词：`torch.cond`、HLO `conditional/while`、`scf.if/scf.while`、guard、graph break。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清 tracing 与 symbolic execution 在控制流上的差异？
+- [ ] 你能不能解释 guard 与 graph break 各自在动态编译中的作用？
+- [ ] 你能不能举一个 `if x.sum() > 0` 类数据相关分支被 trace 固化的场景？
+- [ ] 你能不能说出“tracing 一定泛化错、symbolic 一定更好”这种片面结论？
+
+## Q17. XLA HLO vs MLIR vs TVM 三套 IR 体系，分别适用什么场景？
+
+> 🧭 综合 · 简历上写“熟悉编译器”，但真到 IR 选型就抓瞎——HLO、MLIR、TVM TIR 三套 IR 长得都像，定位完全不同：选错一套，你要么和上游生态对不齐，要么花一年自己搭基础设施。这道题考的是“你知道哪套 IR 解决哪种问题”。
+
+### 1. 核心结论
+HLO、MLIR、TVM 不是同层 IR：HLO 是 XLA 专用、面向 JAX/PyTorch-XLA 等前端共享的高层张量 IR，强项是 TPU/GPU 端到端编译与图级优化；MLIR 是通用多层 IR 基础设施，本身不规定怎么表示模型，靠 dialect 拼出整条 lowering 路径；TVM 既有 Relax/TIR 这套自己的多层 IR，也有围绕 schedule 搜索与多后端 codegen 的完整工具链。
+
+选型时一句话总结：要在 TPU/JAX 上跑就走 HLO；要长期搭一套可演进的多领域编译器或对接 IREE/StableHLO 生态，就用 MLIR；要做面向多硬件后端的自动调度与端到端部署、又能容忍较高学习曲线，就用 TVM。三者并非互斥，现实里 StableHLO + MLIR、Torch-MLIR + IREE、TVM + 自家后端常常组合出现。
+
+### 2. 底层原理
+HLO 的设计是“面向张量计算的统一高层 IR”，保留 shape/dtype/layout 与算子语义，便于做 fusion、布局传播与算子选择，再 lower 到 PTX/TPU executable。它的优化决策集中在 HLO 层，对 TPU 这种受控硬件非常友好。
+
+MLIR 的设计是“可扩展 IR 容器”：operation/region/dialect/pattern rewrite 这些机制本身不绑定深度学习。各家在它之上建自己的 dialect（linalg、tosa、stablehlo、tcp、torch、iree_input 等）做渐进 lowering，最终接到 LLVM、SPIR-V、NVVM、ROCDL 或自定义后端。它换来的是“一套基础设施支持多领域、多后端”，但不会自动产出性能。
+
+TVM 走的是“完整编译栈”路线：Relax 作为高层图 IR 描述模型，TensorIR 描述循环级张量程序，MetaSchedule 做自动调度，Runtime 支持 CUDA/ROCm/CPU/WebGPU/NPU 等多后端。它把图优化、调度搜索、codegen、runtime 打包成产品级解决方案。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，抽象层与生态对齐。HLO 紧跟 XLA/JAX 与 TPU 生态，最近以 StableHLO 形态对外稳定；MLIR 是 LLVM 项目下的通用基础设施，被 TF、IREE、Torch-MLIR、CIRCT 等多个项目复用；TVM 是独立栈，前端可对接 ONNX/PyTorch/TF，后端覆盖多种硬件。
+
+第二，谁更适合“前沿模型 + 多硬件部署”。若硬件后端是 TPU 或 GPU 且与 JAX 紧耦合，HLO 是首选；若需要面向自家 NPU/ASIC 长期演进，并希望复用 LLVM 工具链，MLIR + 自建 dialect 更稳；若希望快速覆盖 CUDA/ROCm/CPU/Mali 等多后端并做调优，TVM 更直接。
+
+第三，IR 层级对照。HLO ≈ MLIR 中的 `stablehlo`/`mhlo` dialect；MLIR 的 `linalg`/`tensor`/`affine`/`scf`/`gpu` 接近 TVM 的 Relax/TIR 中段；MLIR 的 `llvm`/`nvvm` 接近 TVM 后端 codegen。理解这种对照能避免“拿 TIR 和 HLO 平行比”的错位。
+
+第四，工程接入成本。HLO 接入要么跟随 JAX/PT-XLA 上游，要么接 StableHLO + 自己的后端；MLIR 路径要补齐 dialect + lowering + pass，工作量大但天花板高；TVM 路径开发周期短，但跟主流框架对齐和长期维护要看上游迭代速度。
+
+### 4. 工程权衡 / 性能影响
+HLO 的优势是与 XLA/TPU 深度绑定后开箱即用，TPU 上能直接吃到大量上游优化；劣势是若硬件不在 XLA 支持范围，几乎用不上。MLIR 的优势是基础设施统一、可对接 StableHLO/IREE/Torch-MLIR 这条新主线；劣势是“它不直接给你性能”，需要补齐大量 lowering 与后端代码。TVM 优势是端到端完整、自动调度成熟；劣势是和 PyTorch 2.x/StableHLO 生态对齐成本高，模型覆盖度需要持续维护。
+
+性能上，没有“某套 IR 必然更快”的结论。决定性能的是“具体后端 + 调度策略 + 算子库”，而不是 IR 名字本身。
+
+### 5. 常见追问 / 易错点
+第一，不要把 StableHLO 当成新东西又一份 IR，它本质是 HLO 的稳定版本，并以 MLIR dialect 形式存在。
+
+第二，MLIR 不是编译器产品，把它和 HLO/TVM 平行比较层次错位。
+
+第三，TVM 不只是“算子调优工具”，Relax + TensorIR + MetaSchedule + Runtime 是端到端栈。
+
+第四，三套 IR 在现代项目里常常组合出现，例如 PyTorch → Torch-MLIR → StableHLO → IREE → 后端，是典型现代部署链。
+
+### 6. 实践建议
+做技术选型时先列三件事：目标硬件是否在某套 IR 的原生支持里、是否能复用上游生态而非从零搭、长期是否需要支持多领域 lowering。这三问能快速把 HLO/MLIR/TVM 的适用域圈出来。
+
+工程实践里建议保持“IR 与 runtime 分离讨论”：先选 IR 链路解决表达与优化问题，再选 runtime 解决执行与部署问题。把这两个维度耦合在一起讨论，是新人最常犯的错。
+
+### 7. 30 秒速答
+- HLO 面向 XLA/TPU/JAX，MLIR 是通用 IR 基础设施，TVM 是端到端编译栈。
+- 选型看“硬件是否在生态内、是否要长期演进、是否要现成端到端”。
+- 易踩的坑是把三者平行对比，忽略它们处在不同抽象层与不同产品形态。
+- 加分关键词：StableHLO、IREE、Torch-MLIR、Relax、TensorIR、MetaSchedule。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清三套 IR 的产品形态差异？
+- [ ] 你能不能解释 StableHLO 与 MLIR 的关系？
+- [ ] 你能不能举一个“PyTorch → Torch-MLIR → StableHLO → IREE”的端到端链路？
+- [ ] 你能不能说出“某套 IR 一定更快”这种典型立场化误判？
+
+## Q18. 你的模型用 `torch.compile` 跑得很好，但导出到 TensorRT 后形状不匹配编译失败，怎么排查？
+
+> 🧭 综合 · 这是典型“前端跑通≠部署跑通”：Dynamo 抓图时帮你用 SymInt 拟合了动态维度，TensorRT 不认这一套，需要明确的 optimization profile + 显式 batch + 限定 dynamic axes。看到形状不匹配错误就调 min/max 是常见误操作，更可能问题在 export 阶段就已经埋下了。
+
+### 1. 核心结论
+`torch.compile` 与 TensorRT 在“动态形状语义”上有本质差异：前者基于 Dynamo + SymInt + guard，运行时再 specialize；后者需要 build engine 时通过显式 batch + optimization profile 提前圈定 min/opt/max 区间。把 `torch.compile` 跑通的模型导成 TensorRT，常见失败点不是 TensorRT 本身有 bug，而是 export 过程中把动态维度固化错了，或某些算子在 TRT 没有对应实现，或某些 shape 推导依赖了 Python 控制流。
+
+排查思路是先定位“失败发生在哪一层”：torch.export / ONNX 导出阶段、TensorRT parse 阶段、还是 engine build 阶段。每一层对应的可观测信息和修复手段完全不同，盲目调 profile 往往南辕北辙。
+
+### 2. 底层原理
+`torch.compile` 默认会按 dynamic=auto 在第一次遇到不同 shape 时 specialize，FX graph 里出现 SymInt 表示这些维度是符号化的。导出到 ONNX 或 `torch.export` 时，这些 SymInt 才会变成 `dynamic_axes` 标注。如果导出时没有显式声明哪些维度是动态的，所有维度会被固化为示例输入的具体值。
+
+TensorRT 进一步要求：网络必须用显式 batch（隐式 batch 在 TRT 10 已经基本淘汰），动态维度在构建期通过 `IBuilderConfig` + 一个或多个 `IOptimizationProfile` 描述 min/opt/max，运行时通过 `setInputShape` 给出实际值。若 ONNX 中标注的 dynamic_axes 和 profile 不一致，或某些中间张量的 shape 推不出来，build engine 就会失败。
+
+此外，TensorRT 的算子集合与 PyTorch 不完全等价。Dynamo 能 trace 通过的某些 op（如带数据相关条件的 indexing、动态切片、某些 padding 模式），到 TRT 可能没有原生支持，需要 plugin 或图改写。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，先抓 export 阶段。用 `torch.onnx.export(..., dynamic_axes=...)` 或 `torch.export.export(model, args, dynamic_shapes=...)` 时，明确写出哪些维度是 dynamic、最小/最大范围是多少。如果用的是 `torch_tensorrt.compile` 路径，则要看 `Input(min_shape=..., opt_shape=..., max_shape=...)` 是否覆盖真实 workload。
+
+第二，验证 ONNX 是否真的带动态维度。用 `onnx.shape_inference.infer_shapes` 跑一遍，或直接用 Netron 看模型，确认关键算子的 dim 是 `?`/`batch`/`seq` 这种符号而不是具体数字。如果发现该动的没动，问题在导出阶段。
+
+第三，TensorRT parse 阶段定位。打开 `IBuilderConfig` 的详细日志（`ILogger::Severity::kVERBOSE`），看哪一层 parse 失败、形状推导卡在哪个节点。常见问题包括 Reshape target shape 含 -1 又同时含其他动态维度、Slice/Gather 的 indices 在 export 时被常量折叠错、`Expand` 目标 shape 依赖输入数据。
+
+第四，engine build 阶段定位。即使 parse 成功，build 时仍可能因为某个 profile 范围内 shape 无解、workspace 不足、某个 fused kernel 不支持当前 dtype/layout 而失败。`--verbose` 日志里会指出 tactic 失败原因。
+
+第五，profile 设计本身的坑。min/opt/max 设得过宽会让 tactic 选择保守、性能下降；设得过窄又在实际推理时报错。多 profile 是常见解法（如 batch=1 和 batch=32 各一个 profile），但要注意每个 profile 都会带来额外 engine 内存。
+
+第六，回退路径。若某算子 TRT 不支持，可选 plugin、用 ONNX Runtime + TRT EP 的混合执行、或在导出前用 `torch.fx` 改写成 TRT 友好的等价实现。
+
+### 4. 工程权衡 / 性能影响
+彻底用 TensorRT 的好处是 latency 与吞吐通常优于 ORT + CUDA EP，特别是对 Transformer/Vision 模型；代价是构建期长（70B 级模型 build engine 可能数十分钟）、动态 shape 灵活性差、调试周期长。
+
+`torch.compile` 跑通但 TRT 跑不通时，常见决策是要么花时间把 export + profile 调到能 build，要么先用 `torch_tensorrt` 或 ORT TRT EP 这种混合方案兜底，再逐步把更多子图迁到纯 TRT engine。
+
+### 5. 常见追问 / 易错点
+第一，不要看到 shape error 就调 min/max。根因常常在导出阶段没标 dynamic_axes，profile 改成什么都救不回来。
+
+第二，多 profile 不是免费的。每个 profile 都会让 engine 内存和 build 时间上升，要按真实 workload bucket 决定数量。
+
+第三，`torch.compile` 的 SymInt 不会自动变成 ONNX dynamic axes，必须在 export 时显式声明。
+
+第四，部分算子 TRT 只支持静态 shape，例如某些 `NonZero`、`Unique`、shape 依赖 data 的 op，遇到这类情况要么换实现、要么走 plugin。
+
+### 6. 实践建议
+排查这类问题建议固定流程：先抓 `torch.export` 或 ONNX 阶段的实际图结构 → 用 onnx checker / shape inference 看动态维度是否保留 → 用 `trtexec --verbose --onnx=model.onnx --minShapes=... --optShapes=... --maxShapes=...` 一行命令复现 build 失败 → 根据日志定位是 parse、shape inference 还是 tactic 失败。
+
+落地时记一张“export 配置 + ONNX 模型 + TRT profile + 真实 workload 分布”的对照表，比孤立调任何一项都更高效。生产里一般也会把 `torch_tensorrt` 编译产物纳入 CI，避免某次模型小改动悄悄把 dynamic shape 配置打碎。
+
+### 7. 30 秒速答
+- 失败十有八九在 export 阶段：dynamic_axes/dynamic_shapes 没标，TRT profile 救不回来。
+- 用 `trtexec --verbose` 复现，按 export → parse → build 三段定位根因。
+- 易踩的坑是看见 shape error 就改 min/max profile，根因其实在更上游。
+- 加分关键词：`torch.export`、`dynamic_shapes`、`dynamic_axes`、`IOptimizationProfile`、`trtexec --verbose`、`torch_tensorrt`。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清 `torch.compile` 与 TensorRT 在动态形状语义上的差异？
+- [ ] 你能不能解释 SymInt 与 ONNX dynamic_axes 的关系？
+- [ ] 你能不能举一个 Reshape/Expand 因 export 阶段被常量折叠而失败的场景？
+- [ ] 你能不能说出“只调 TRT profile 就能修复一切 shape 问题”这种典型误判？
+
+## Q19. 一个 70B Llama 在 H100 上用 TensorRT-LLM build engine 大约要多久？build cache 能省下多少？
+
+> 🧭 综合 · 70B 模型 build 一次 engine 通常二十分钟到一小时起步，工程上不能每次发版都重新跑——这就是为什么 TRT-LLM 在 build cache、timing cache、kv cache 量化、weight-only 这一堆东西上花了大量功夫。会估算编译时间和会用 cache，是判断你能不能落地大模型推理的硬指标。
+
+### 1. 核心结论
+70B 级 Llama 在单卡或多卡 H100 上用 TensorRT-LLM build 一次完整 engine，常见耗时大致在 20 分钟到 1 小时之间，强依赖：TP/PP 切分方式、量化配置（FP16 / FP8 / INT4 weight-only / SmoothQuant）、是否启用 Multi-Block-Mode / paged kv cache、max_input_len/max_output_len/max_batch_size 的取值、以及 H100 数量。FP8 + 多卡 TP 通常比 FP16 单卡 build 时间更长，因为要做更多 tactic 选择。
+
+build cache（timing cache）能显著降低重复 build 成本，命中良好时常能节省 30%~70% 的 build 时间。它复用的是 tactic timing 信息，而不是直接复用最终 engine 二进制；engine 本身只能在“配置完全一致”的前提下整体复用。
+
+### 2. 底层原理
+TRT-LLM 的 build 过程，本质是先把模型结构（通常通过 `tensorrt_llm.Builder` + Python 定义的 network）转成 TensorRT 网络，再做大量 tactic 选择：对每个 GEMM / attention / layernorm，TRT 会在多个候选 kernel 中做 micro-benchmark，挑出当前 shape/dtype/layout 下最快的实现。70B 模型的 layer 数多、每层都有多个 GEMM，tactic 搜索是 build 时间的大头。
+
+timing cache 把每个 tactic 的耗时记录下来，下次 build 配置相同（dtype、shape range、profile、硬件型号、driver 版本）时直接复用，跳过 micro-benchmark，只做 codegen 与 weight bake-in。weight 量化（如 INT4 AWQ / GPTQ）的 calibration 步骤通常在 build 之外完成，量化后的权重直接进入 engine。
+
+多 GPU TP 场景下，每个 rank 都要 build 自己的 engine 分片，时间不是线性放大，因为不同 rank 共享 timing cache 时可以并行加速；但 PP 切分时每段子模型需要独立 build，往往串行执行。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，build 时间估算。FP16 70B + TP=4 在 4×H100 上大致 25~45 分钟；FP8 加上更多 plugin tactic 搜索可能拉到 40~70 分钟；INT4 weight-only 由于权重处理更复杂，build 加上量化预处理总耗时常超过 1 小时。这些只是经验区间，实际数字随 TRT-LLM 版本、CUDA/cuBLAS 版本、profile 设置变化明显。
+
+第二，timing cache 用法。`tensorrt_llm.builder` 支持 `--timing_cache cache.bin`（或对应 Python API）持久化 tactic 信息。第一次 build 写入 cache，后续 build 命中时只对“配置变化的部分”重做 micro-benchmark。命中良好时 build 时间可压缩到原先的 1/3 甚至更低。
+
+第三，engine cache 与 timing cache 的区别。engine cache 是最终二进制级缓存，只在“所有 build 参数完全一致”时直接复用，跳过整个 build；timing cache 粒度更细，允许部分参数变化时仍复用 tactic 信息。生产里通常两层都开。
+
+第四，影响 build 时间的关键旋钮。`max_batch_size`、`max_input_len`、`max_output_len`、`max_num_tokens`、`opt_batch_size` 决定了 profile 范围；`use_paged_kv_cache`、`multi_block_mode`、`use_fused_mlp`、`use_fp8_context_fmha` 会增减 tactic 搜索空间；GEMM plugin 的开关（如 `gemm_plugin=fp16/fp8`）也直接影响搜索成本。
+
+第五，硬件与驱动一致性。timing cache 强依赖 GPU 型号 + driver + CUDA 版本。换驱动或换卡型号通常导致 cache miss 整体失效，要重新 build。生产里通常对每个硬件 SKU 维护独立的 cache 目录。
+
+### 4. 工程权衡 / 性能影响
+build cache 的收益不仅是省时间，还能显著降低 CI/CD 上线流程的不确定性。没 cache 时一次 70B build 失败重试就是一小时起步，cache 命中良好时同样改动可能 5~10 分钟搞定。
+
+代价是 cache 一致性管理：硬件型号、驱动、TRT-LLM 版本、量化配置任意一个变了，cache 都可能失效。生产里通常给 cache 打 tag（型号 + driver + trtllm 版本 + 量化方案），并在 CI 里显式校验。
+
+性能本身不受 cache 影响——cache 只影响 build 速度，最终 engine 的推理性能取决于 tactic 选择结果，不会因为命中 cache 而变快或变慢。
+
+### 5. 常见追问 / 易错点
+第一，不要把 build 时间和 inference 时间混为一谈。build 一次几十分钟，但 engine 一旦生成可以反复用。
+
+第二，timing cache 不能跨硬件 SKU 复用。A100 的 cache 拿到 H100 上用，命中率极低甚至完全 miss。
+
+第三，量化（特别是 AWQ/GPTQ）的 calibration 时间往往不算在 build 内，但实际工程里也要算到“总上线耗时”里。
+
+第四，多 profile 会让 build 时间近似线性放大。profile 数量要按真实 workload bucket 设计，而不是随手堆。
+
+### 6. 实践建议
+做大模型 build 工程化时建议：把 build 流程封装成可重入脚本，统一管理 timing cache 与 engine cache 路径；按 (gpu_sku, driver, trtllm_version, quantization, profile) 维度建 cache key；在 CI 里至少跑一次冷 build 基准时间，便于发现 cache 异常失效。
+
+线上发版时，能不重 build 就不重 build：把同一个 engine 在多机复用，配合 NCCL 拓扑做 TP 分发。真的需要重 build 时，确认 cache 命中率 > 50% 再放行，否则等于浪费一次窗口。
+
+### 7. 30 秒速答
+- 70B Llama 在 H100 上 build 一次约 20~60 分钟，强依赖 TP/量化/profile 配置。
+- timing cache 命中良好时省 30%~70% build 时间，但只对 tactic timing 复用，不替代 engine cache。
+- 易踩的坑是换驱动/换 SKU/换量化让 cache 整体失效，CI 必须按硬件维度管 cache。
+- 加分关键词：`timing_cache`、`engine cache`、TP/PP、FP8/AWQ/GPTQ、`max_num_tokens`、`paged_kv_cache`、`multi_block_mode`。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话估算 70B 在 H100 上 build engine 的时间量级？
+- [ ] 你能不能解释 timing cache 与 engine cache 的区别？
+- [ ] 你能不能举一个换驱动/换 SKU 导致 cache miss 的场景？
+- [ ] 你能不能说出“build 越快推理越快”这种典型混淆？
+
+## Q20. 从 0 设计一个支持多硬件后端（CUDA/ROCm/CPU）的端到端 inference 编译流水线
+
+> 🧭 综合 · 公司给你一个真实 KPI：把 PyTorch 模型一键编译到 CUDA/ROCm/CPU 三套后端，输出二进制 + 调度元数据，业务方拿着就能上线。这题考的是“你能不能从前端 capture、中间 IR、后端 codegen、runtime 打包到调度元数据五个层次同时拉出一条可上线的链路”。
+
+### 1. 核心结论
+端到端 inference 编译流水线的核心目标是：以 PyTorch 模型为输入，输出每个目标后端（CUDA / ROCm / CPU）的可执行产物以及一份统一的调度元数据（输入输出签名、shape range、kv cache 配置、kernel 选择、推荐 batch、依赖版本）。架构上应该把流水线拆成五段：前端 capture、统一 IR、后端 lowering、产物打包、调度元数据。每一段都要做到“可观测、可回滚、可缓存”。
+
+技术选型上建议以 `torch.export` 为前端入口，以 MLIR + StableHLO（或 Torch-MLIR）为中间表示，CUDA 走 Inductor / TensorRT-LLM、ROCm 走 IREE / Triton-ROCm、CPU 走 IREE-LLVM 或 oneDNN/OpenVINO，runtime 用一个轻量 dispatcher 按硬件选择二进制。
+
+### 2. 底层原理
+多后端编译的本质矛盾是：前端只能描述一次模型，后端却各有不同的 kernel 库、布局、量化能力。把这些差异隐藏在统一 IR 后是关键——前端不应感知硬件，后端不应反推模型语义。常见做法是用 StableHLO 或 Torch-MLIR 作为“前端无关、后端无关”的统一交付件，再分别 lower 到各家后端 dialect。
+
+调度元数据是这套流水线的隐藏关键资产：它告诉 runtime “这个 engine 对应 batch=1~32，seq=2048，需要 16GB 显存，依赖 cuBLAS 12.x”这类信息。没有这份元数据，多后端二进制就只是一堆离散文件，runtime 没法做智能分发。
+
+### 3. 关键机制 / 流程 / 数据结构
+第一，前端 capture 层。用 `torch.export.export(model, args, dynamic_shapes=...)` 拿到 ExportedProgram；走 `torch_xla` 或 `torch.compile(..., backend="openxla")` 拿到 StableHLO MLIR。这一层要解决的是 dynamic shape 标注、Python 副作用清理、控制流符号化（用 `torch.cond` / `torch.while_loop`）。产物是 “一份带 dynamic_shapes 元数据的 StableHLO module”。
+
+第二，统一 IR 层。StableHLO 模块进入 MLIR pipeline：做 canonicalization、algebraic simplification、layout propagation、shape inference、operator decomposition。这里只做硬件无关的优化，保留 `stablehlo.dot`、`stablehlo.reduce` 等高层语义，便于下游后端按需 lower。
+
+第三，后端 lowering 层。CUDA 路径走 `stablehlo -> linalg -> gpu/nvvm -> ptx`，或绕路 TensorRT-LLM 生成 engine；ROCm 路径走 `stablehlo -> linalg -> gpu/rocdl -> hsaco` 或 IREE HAL；CPU 路径走 `stablehlo -> linalg -> vector/llvm -> object file`，配合 oneDNN/OpenVINO 加速线性代数。每个后端有独立 lowering pipeline，但共享 stablehlo 入口。
+
+第四，产物打包层。每个后端产出 (binary, metadata, signature.json)：CUDA 是 `.engine` 或 `.so`、ROCm 是 `.hsaco` 或 `.so`、CPU 是 `.so` 或 `.a`。signature.json 描述输入名/输出名/dtype/shape range/kv cache 配置/量化方案。所有产物按 (model_id, version, backend, gpu_sku, driver) 哈希到一个 artifact registry。
+
+第五，调度元数据层。在 artifact registry 之上维护一张 dispatch table：(model_id, backend, gpu_sku, driver, max_batch, max_seq, quantization) -> artifact path。runtime 启动时查这张表，按硬件能力选择最佳产物。
+
+第六，缓存与增量编译。每个阶段都按 input hash 做缓存：export 缓存按 (model code hash, args signature) key；MLIR 优化缓存按 module hash；后端 lowering 缓存按 (stablehlo hash, backend, target triple, opt level) key。任意一段命中就跳过后续重复工作。
+
+### 4. 工程权衡 / 性能影响
+统一 IR 路线（StableHLO + MLIR）天花板高，但前期投入大：需要养一支懂 MLIR 的团队。如果业务只需要 CUDA + CPU 两后端，直接走 TorchInductor + OpenVINO 这种成熟工具链更快上线，代价是后续加 ROCm/NPU 时要重做集成。
+
+性能上，多后端编译不会“自动比手工实现快”。CUDA 上最好的实现往往仍是 TensorRT-LLM 或手工 CUTLASS kernel；CPU 上 oneDNN/OpenVINO 通常优于纯 MLIR codegen。明智的做法是“以编译器为骨架，关键算子留接口给手工/库实现”。
+
+### 5. 常见追问 / 易错点
+第一，不要试图“一次 build 三套后端”。每个后端有自己的 dependency、driver、量化配置，强行合并 build 流程会让 CI 变成噩梦。正确做法是 fan-out 三个独立 build job，最后 fan-in 到 dispatch table。
+
+第二，调度元数据不是事后补的，要从一开始就把它当成 first-class artifact。否则后期想加 “按 shape 选 engine” 的逻辑就要重构整条流水线。
+
+第三，统一 IR 不等于零差异。某些 op 在 ROCm 上没有原生支持，需要 fallback 到 generic linalg；某些 attention 在 CPU 上必须换实现。这些差异要在 stablehlo 优化阶段就用 op decomposition 处理掉。
+
+第四，runtime 选型常被低估。一个能跨 CUDA/ROCm/CPU 同样接口跑 stablehlo 产物的 runtime（如 IREE Runtime）能省掉大量胶水代码，否则每后端要写一套 loader。
+
+### 6. 实践建议
+立项时先冻结“最小可上线集”：1 个模型族（如 Llama-7B）+ 2 个后端（CUDA + CPU），完整跑通 export → MLIR → backend → 打包 → runtime 调度的闭环，再扩到 ROCm 和更多模型。直接铺开五后端三模型的项目通常半年内见不到第一次端到端跑通。
+
+工程实践里要重视三件事：每段流水线都有 IR/产物 dump、每段都有正确性测试（数值对齐到 PyTorch eager）、每段都有 cache。这三件事齐全了，后续无论换模型、换后端还是换硬件，流水线的边际成本都能控制在“写一个新 lowering pass”而不是“重搭一套系统”。
+
+### 7. 30 秒速答
+- 五段架构：前端 capture（torch.export）→ 统一 IR（StableHLO/MLIR）→ 后端 lowering → 产物打包 → 调度元数据。
+- 关键是把硬件差异隔离在 lowering 层，前端只交付一份 stablehlo + 一份 signature。
+- 易踩的坑是“一次 build 三后端”、忽视调度元数据、低估 runtime 选型成本。
+- 加分关键词：`torch.export`、StableHLO、Torch-MLIR、IREE HAL、TensorRT-LLM、oneDNN/OpenVINO、artifact registry、dispatch table。
+
+### 8. 自测 checklist
+- [ ] 你能不能用一句话讲清这条流水线的五段架构？
+- [ ] 你能不能解释 stablehlo 在多后端编译中扮演的角色？
+- [ ] 你能不能举一个调度元数据缺失导致 runtime 选错 engine 的场景？
+- [ ] 你能不能说出“多后端 build 应该共用一条 pipeline”这种典型架构误判？
